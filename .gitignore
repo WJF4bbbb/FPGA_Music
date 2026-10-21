@@ -1,0 +1,6 @@
+sim/*.vvp
+sim/*.vcd
+sim/*.fst
+gowin/impl/
+*.log
+*.lic
