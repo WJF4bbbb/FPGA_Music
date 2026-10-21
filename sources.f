@@ -1,11 +1,11 @@
 rtl/top.v
-rtl/clk_gen.v
+rtl/audio_timing.v
 rtl/i2s_tx.v
 rtl/test_mode.v
 rtl/voice_alloc.v
 rtl/osc.v
 rtl/adsr.v
 rtl/mixer.v
-rtl/key_scan.v
-rtl/timbre_sel.v
+rtl/sensor_frontend.v
+rtl/control_panel.v
 rtl/note_event.v
