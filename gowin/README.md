@@ -2,7 +2,7 @@
 
 1. 用 Gowin EDA 新建 FPGA 工程，保存到本目录，顶层为 top。
 2. 按手中板卡核实芯片型号/封装/速度等级后选择器件。
-3. 添加 ../rtl/ 下全部 .v，添加 ../constraints/top.cst 与 top.sdc。
+3. 按 ../sources.f 的11个活动RTL清单添加源文件，添加 ../constraints/top.cst 与 top.sdc；排除备用clk_gen和所有tb。
 4. 完成模块逻辑、复位处理和真实约束后再综合/布局布线/下载。
 
 此处未伪造 .gprj 工程：必须由实际 EDA 版本和真实器件配置生成。
