@@ -1,6 +1,18 @@
-sim/*.vvp
+# Simulation output
 sim/*.vcd
 sim/*.fst
-gowin/impl/
+sim/*.wlf
+
+# Temporary files
 *.log
-*.lic
+*.tmp
+*.bak
+*.swp
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Operating system files
+Thumbs.db
+.DS_Store
