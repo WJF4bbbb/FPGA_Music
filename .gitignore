@@ -1,25 +1,7 @@
 # Simulation output
-*.vvp
 sim/*.vcd
 sim/*.fst
 sim/*.wlf
-sim/*.gtkw
-
-# IDE caches and per-user workspace state (at any depth)
-.dide/
-*.gprj.user
-
-# Gowin generated output; retain only this module's reproducible settings
-# and the original synthesis / implementation evidence.
-/gowin/**/impl/*
-!/gowin/audio_timing/audio_timing/impl/audio_timing_process_config.json
-!/gowin/audio_timing/audio_timing/impl/gwsynthesis/
-/gowin/audio_timing/audio_timing/impl/gwsynthesis/*
-!/gowin/audio_timing/audio_timing/impl/gwsynthesis/audio_timing_syn.rpt.html
-!/gowin/audio_timing/audio_timing/impl/pnr/
-/gowin/audio_timing/audio_timing/impl/pnr/*
-!/gowin/audio_timing/audio_timing/impl/pnr/audio_timing.rpt.txt
-!/gowin/audio_timing/audio_timing/impl/pnr/audio_timing.tr
 
 # Temporary files
 *.log
