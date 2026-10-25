@@ -5,6 +5,7 @@
     <Version>5</Version>
     <Device name="GW2AR-18C" pn="GW2AR-LV18QN88C8/I7">gw2ar18c-000</Device>
     <FileList>
+        <File path="../../../rtl/test_mode.v" type="file.verilog" enable="1"/>
         <File path="../../../rtl/audio_timing.v" type="file.verilog" enable="1"/>
         <File path="../../../rtl/i2s_tx.v" type="file.verilog" enable="1"/>
         <File path="../../../rtl/top_i2s_test.v" type="file.verilog" enable="1"/>
