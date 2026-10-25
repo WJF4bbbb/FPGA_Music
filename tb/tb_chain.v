@@ -3,8 +3,8 @@
 //     voice_alloc -> (osc + adsr) x 4 -> mixer
 // 验证：弹和弦能出声、偷声部不出错、松手真的静音、混音不溢出。
 //
-// 注意：clk_gen / i2s_tx 还是 A 的桩，所以这里自己产生 sample_en，
-// 并且不去碰 I2S 那一段。等 A 的模块好了，用 tb_top.v 跑全链。
+// 注意：这里自己产生 frame_tick（真实系统由 audio_timing 提供），
+// 并且不去碰 I2S 那一段。整机联调由 A 的 top.v 负责。
 `timescale 1ns / 1ps
 `default_nettype none
 module tb_chain;
@@ -13,7 +13,7 @@ module tb_chain;
 
     reg clk = 1'b0;
     reg rst_n = 1'b0;
-    reg sample_en = 1'b0;
+    reg frame_tick = 1'b0;
 
     // ---- 事件输入（模拟 note_event 的输出）----
     reg        evt_valid = 1'b0;
@@ -34,7 +34,9 @@ module tb_chain;
     wire [NVOICE-1:0]    env_done;
 
     // ---- mixer 输出 ----
-    reg  [15:0]        master_gain = 16'd16384;   // 0.25，4 复音留余量
+    // 默认 1.0。注意 mixer 内部已经先 >>2 留出 4 路余量，
+    // 所以这里给满增益也不会削顶（这正是 V1.1 合同的要求）。
+    reg  [15:0]        master_gain = 16'd65535;
     wire signed [15:0] mixed_sample;
     wire               mixed_valid;
     wire [31:0]        clip_count;
@@ -50,10 +52,10 @@ module tb_chain;
 
     always #5 clk = ~clk;
 
-    // 每 4 个时钟一个样本使能（真实系统是 576，这里缩小以便快速仿真）
+    // 每 4 个时钟一个帧节拍（真实系统是 576，这里缩小以便快速仿真）
     always @(posedge clk) begin
         se_cnt     <= se_cnt + 1;
-        sample_en  <= ((se_cnt % 4) == 0);
+        frame_tick <= ((se_cnt % 4) == 0);
     end
 
     // ---------------- DUT ----------------
@@ -72,12 +74,12 @@ module tb_chain;
             wire               wave_valid;
 
             osc #(.FS_HZ(46875)) u_osc (
-                .clk(clk), .rst_n(rst_n), .sample_en(sample_en),
+                .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick),
                 .note(voice_note[i*7 +: 7]), .bend(bend), .timbre(timbre),
                 .wave(wave), .valid(wave_valid)
             );
             adsr #(.FS_HZ(46875)) u_adsr (
-                .clk(clk), .rst_n(rst_n),
+                .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick),
                 .wave_valid(wave_valid), .wave(wave),
                 .gate(voice_gate[i]), .trigger(voice_trigger[i]),
                 .sample(voice_samples[i*16 +: 16]), .valid(voice_valid[i]),
@@ -87,7 +89,7 @@ module tb_chain;
     endgenerate
 
     mixer #(.NVOICE(NVOICE)) u_mixer (
-        .clk(clk), .rst_n(rst_n),
+        .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick),
         .voice_samples(voice_samples), .voice_valid(voice_valid),
         .master_gain(master_gain),
         .sample(mixed_sample), .valid(mixed_valid), .clip_count(clip_count)
@@ -183,31 +185,35 @@ module tb_chain;
         press(3'd3, 7'd72);
         run_n(2000);
         clear_win; run_n(2000);
-        show_win("4-voice chord, gain=0.25");
+        show_win("4-voice chord, gain=1.0");
         if (w_x != 0) begin
             $display("  FAIL  x in chord output");
             errors = errors + 1;
         end
+        // V1.1 起 mixer 内部先 >>2 留余量，4 路满幅在 gain=1.0 下也不该削顶
         if (clip_count != 0) begin
-            $display("  FAIL  chord clipped with gain=0.25 (clips=%0d)", clip_count);
+            $display("  FAIL  chord clipped at gain=1.0 (clips=%0d) - headroom broken", clip_count);
+            errors = errors + 1;
+        end else begin
+            $display("  ok    no clipping at gain=1.0 (>>2 headroom works)");
+        end
+
+        // ---------- 3) 降低总音量：整体变轻，且仍然不削顶 ----------
+        $display("  -- lower gain to 0.25 (16384) --");
+        master_gain = 16'd16384;
+        clear_win; run_n(2000);
+        show_win("4-voice chord, gain=0.25");
+        if (clip_count != 0) begin
+            $display("  FAIL  clipped at gain=0.25 (%0d)", clip_count);
             errors = errors + 1;
         end else begin
             $display("  ok    no clipping at gain=0.25");
         end
-
-        // ---------- 3) 调大音量，应开始饱和 ----------
-        $display("  -- raise gain to 1.0 (65535) --");
-        master_gain = 16'd65535;
-        clear_win; run_n(2000);
-        show_win("4-voice chord, gain=1.0");
-        if (clip_count == 0) begin
-            $display("  FAIL  expected saturation at gain=1.0");
+        if ((w_max - w_min) < 4000) begin
+            $display("  FAIL  chord too quiet at gain=0.25: p2p=%0d", w_max - w_min);
             errors = errors + 1;
         end else begin
-            $display("  ok    saturating as expected (%0d clips)", clip_count);
-        end
-        if (w_max != 32767 || w_min != -32768) begin
-            $display("  note  extremes touched: [%0d, %0d] (saturation rails)", w_min, w_max);
+            $display("  ok    chord still audible at gain=0.25 (p2p=%0d)", w_max - w_min);
         end
 
         // ---------- 4) 第 5 个键：偷声部 ----------

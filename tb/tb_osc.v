@@ -10,7 +10,7 @@ module tb_osc;
 
 reg         clk       = 1'b0;
 reg         rst_n     = 1'b0;
-reg         sample_en = 1'b0;
+reg         frame_tick = 1'b0;
 reg  [6:0]  note      = 7'd60;
 reg  signed [3:0] bend   = 4'sd0;
 reg  [1:0]  timbre    = 2'd0;
@@ -32,7 +32,7 @@ always #18.5185 clk = ~clk;
 osc dut (
     .clk       (clk),
     .rst_n     (rst_n),
-    .sample_en (sample_en),
+    .frame_tick (frame_tick),
     .note      (note),
     .bend      (bend),
     .timbre    (timbre),
@@ -43,7 +43,7 @@ osc dut (
 // 产生采样节拍：每 FRAME 拍一下
 always @(posedge clk) begin
     cyc       = cyc + 1;
-    sample_en = (cyc % FRAME == 0);
+    frame_tick = (cyc % FRAME == 0);
 end
 
 // 每出一个新样本就看看：过零了就数周期，顺便记最大最小值

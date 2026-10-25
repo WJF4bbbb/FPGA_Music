@@ -5,7 +5,7 @@
 //
 // 和 rtl/top.v 的区别：
 //   - 这里没有按键扫描、没有 I2S、没有音色选择（那些是 A 和 C 的）
-//   - 这里的 sample_en 是本地分频出来的占位节拍，真正的 clk_gen 由 A 提供
+//   - 这里的 frame_tick 是本地分频出来的占位节拍，真正的 audio_timing 由 A 提供
 //
 // 综合入口：bash synth_check/run_synth.sh
 `default_nettype none
@@ -29,17 +29,17 @@ module b_top #(
 
     // ---- 占位采样节拍：27MHz / 576 = 46875 Hz ----
     reg [9:0] div_cnt;
-    reg       sample_en;
+    reg       frame_tick;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             div_cnt   <= 10'd0;
-            sample_en <= 1'b0;
+            frame_tick <= 1'b0;
         end else if (div_cnt == 10'd575) begin
             div_cnt   <= 10'd0;
-            sample_en <= 1'b1;
+            frame_tick <= 1'b1;
         end else begin
             div_cnt   <= div_cnt + 10'd1;
-            sample_en <= 1'b0;
+            frame_tick <= 1'b0;
         end
     end
 
@@ -68,7 +68,7 @@ module b_top #(
             osc #(.FS_HZ(FS_HZ)) u_osc (
                 .clk       (clk),
                 .rst_n     (rst_n),
-                .sample_en (sample_en),
+                .frame_tick (frame_tick),
                 .note      (v_note[i*7 +: 7]),
                 .bend      (bend),
                 .timbre    (timbre),
@@ -78,7 +78,8 @@ module b_top #(
             adsr #(.FS_HZ(FS_HZ)) u_adsr (
                 .clk        (clk),
                 .rst_n      (rst_n),
-                .wave_valid (sample_en),
+                .frame_tick (frame_tick),
+                .wave_valid (frame_tick),
                 .wave       (wave_flat[i*16 +: 16]),
                 .gate       (v_gate[i]),
                 .trigger    (v_trig[i]),
@@ -93,6 +94,7 @@ module b_top #(
     mixer #(.NVOICE(4)) u_mix (
         .clk           (clk),
         .rst_n         (rst_n),
+        .frame_tick    (frame_tick),
         .voice_samples (samp_flat),
         .voice_valid   (s_valid),
         .master_gain   (master_gain),

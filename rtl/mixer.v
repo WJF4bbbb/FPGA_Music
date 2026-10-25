@@ -1,15 +1,19 @@
 // Owner: B
-// STATUS: W2 implemented. 4-lane signed sum + master_gain scaling + saturation.
-// See docs/interfaces.md before changing ports.
+// STATUS: W2 implemented. N-lane signed sum + headroom + master_gain + saturation.
+//         端口已按 docs/interfaces.md V1.1 对齐：新增 frame_tick，在它上面锁存总音量。
 //
 // 关键点（这是本模块唯一容易错的地方）：
 //   16 位有符号数相加，结果会超出 16 位范围。如果直接截断低 16 位，
 //   超过 +32767 的数会"回绕"成负数 —— 听感上是刺耳的撕裂爆音，
 //   评分里明确禁止。所以必须先加宽、再饱和（clamp）到 [-32768, 32767]。
+//
+//   另外 4 路同时满幅时总和是 4 倍满幅，直接乘增益必然削顶。
+//   所以先右移 log2(NVOICE) 留出余量（4 路 >>2，8 路 >>3），再乘总音量。
 `default_nettype none
 module mixer #(parameter NVOICE = 4) (
     input  wire                     clk,
     input  wire                     rst_n,
+    input  wire                     frame_tick,
     input  wire [NVOICE*16-1:0]     voice_samples,
     input  wire [NVOICE-1:0]        voice_valid,
     input  wire [15:0]              master_gain,
@@ -36,13 +40,26 @@ module mixer #(parameter NVOICE = 4) (
         end
     end
 
-    // ---- 3) 乘总音量 ----
+    // ---- 3) 留余量 + 乘总音量 ----
     // master_gain 是 0..65535 的无符号数，65536 才等于 1.0（Q16 定点）。
     // 这里先零扩展成 17 位有符号（保证是非负数），再乘，结果才有符号。
-    wire signed [16:0] gain_s = $signed({1'b0, master_gain});
+    //
+    // 总音量在 frame_tick 那一拍定格：一帧之内旋钮再动，本帧用的还是旧值，
+    // 避免同一帧里四个声部用了不同的增益。
+    reg [15:0] gain_lat;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)          gain_lat <= 16'd0;
+        else if (frame_tick) gain_lat <= master_gain;
+    end
+
+    // 4 路同时满幅 -> 总和约 4 倍满幅；先 >>2 把余量留出来（8 路 >>3）。
+    localparam integer SUM_SHIFT = (NVOICE >= 8) ? 3 : 2;
+
+    wire signed [23:0] acc_sh = acc >>> SUM_SHIFT;          // 算术右移，负数也正确
+    wire signed [16:0] gain_s = $signed({1'b0, gain_lat});
 
     // 24 + 17 = 41 位；用 wire 承接，LHS 宽度就是 41，乘法不会被提前截断
-    wire signed [40:0] prod   = acc * gain_s;
+    wire signed [40:0] prod   = acc_sh * gain_s;
 
     // 右移 16 位还原定标。>>> 是算术右移，负数也正确。
     wire signed [24:0] scaled = prod >>> 16;

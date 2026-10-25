@@ -9,17 +9,16 @@
 // 电平定标：level 是 0..32767 的 Q15 增益（32767 ≈ 1.0 满幅），
 //   输出 sample = wave * level >>> 15。
 //
-// 事件处理（这是接口合同里明确要求的）：
-//   trigger 是单拍脉冲，可能落在两个样本之间 —— 必须先锁存，
-//   到下一个 wave_valid（样本边界）再消费，否则会丢音。
-//
-// 实现要点：包络的"下一状态"和"下一电平"先用阻塞赋值算进临时变量，
-//   再用**更新后的电平**算输出。这样释放结束时输出正好是 0，
-//   不会残留一个尾巴样本。
+// 事件处理（V1.1 合同，改过一次，务必按这个来）：
+//   gate / trigger 在 frame_tick 那一拍**定格成快照**，随后 wave_valid 到达时
+//   用这份快照更新包络。这样一帧之内控制线再抖动也不会影响本帧结果。
+//   trigger 可能只持续一个 clk、落在两帧之间 —— 先存进 trig_lat，
+//   到下一个 frame_tick 才并入快照，所以不会丢音。
 `default_nettype none
 module adsr #(parameter FS_HZ = 46875) (
     input  wire               clk,
     input  wire               rst_n,
+    input  wire               frame_tick,
     input  wire               wave_valid,
     input  wire signed [15:0] wave,
     input  wire               gate,
@@ -50,9 +49,9 @@ module adsr #(parameter FS_HZ = 46875) (
     reg [2:0]         state;
     reg signed [15:0] level;        // 当前包络电平 0..32767
 
-    reg               trig_lat;     // trigger 锁存
-    reg               rel_lat;      // 松键事件锁存
-    reg               gate_d;       // 上一拍的 gate，用来抓下降沿
+    reg               trig_lat;     // trigger 原始锁存（可能落在两帧之间）
+    reg               trig_snap;    // frame_tick 定格的"本帧要处理的重触发"
+    reg               gate_snap;    // frame_tick 定格的 gate 电平
 
     reg signed [15:0] sample_r;
     reg               valid_r;
@@ -64,31 +63,36 @@ module adsr #(parameter FS_HZ = 46875) (
     reg               done_nxt;
     reg signed [31:0] prod_nxt;
 
-    // 锁存值与本拍事件合并，保证"同一拍到达"也不会漏
-    wire trig_now = trig_lat | trigger;
-    wire rel_now  = (rel_lat | (gate_d & ~gate)) & (state != S_IDLE);
+    // frame_tick 与 wave_valid 同拍时用本拍的新快照，否则用已定格的快照。
+    // 这样"同一拍到达"不会漏事件，也不会把上一帧的事件重复消费。
+    wire trig_eff = frame_tick ? (trig_lat | trigger) : trig_snap;
+    wire gate_eff = frame_tick ? gate : gate_snap;
+
+    wire trig_now = trig_eff;
+    wire rel_now  = (state != S_IDLE) & ~gate_eff;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state     <= S_IDLE;
             level     <= 16'sd0;
             trig_lat  <= 1'b0;
-            rel_lat   <= 1'b0;
-            gate_d    <= 1'b0;
+            trig_snap <= 1'b0;
+            gate_snap <= 1'b0;
             sample_r  <= 16'sd0;
             valid_r   <= 1'b0;
             done_r    <= 1'b0;
         end else begin
-            gate_d <= gate;
             done_r <= 1'b0;             // 默认无完成脉冲
 
-            // ---- 事件锁存：只在样本边界消费 ----
-            if (wave_valid) begin
-                trig_lat <= 1'b0;
-                rel_lat  <= 1'b0;
+            // ---- 事件：frame_tick 定格本帧控制，wave_valid 时消费 ----
+            if (frame_tick) begin
+                gate_snap <= gate;
+                // 同拍若正好有 wave_valid，本帧立刻消费掉，不留到下一帧
+                trig_snap <= (trig_lat | trigger) & ~wave_valid;
+                trig_lat  <= 1'b0;
             end else begin
-                if (trigger)        trig_lat <= 1'b1;
-                if (gate_d & ~gate) rel_lat  <= 1'b1;
+                if (trigger)    trig_lat  <= 1'b1;
+                if (wave_valid) trig_snap <= 1'b0;
             end
 
             // ---- 每个样本更新一次包络 ----

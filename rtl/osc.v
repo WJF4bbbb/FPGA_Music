@@ -1,5 +1,7 @@
 // Owner: B
 // STATUS: W1 DDS + W3 timbre(4 waveforms) + bend(+-2 semitones) done.
+//         端口已按 docs/interfaces.md V1.1 对齐：采样节拍信号名为 frame_tick
+//         （来自 audio_timing），每次 frame_tick 推进一次相位并输出一拍 valid。
 //
 // 这个模块在干什么（大白话）：
 //   一个转盘 + 一张对照表。指针（phase）每个采样点往前走一步（fcw），
@@ -13,7 +15,7 @@
 module osc #(parameter FS_HZ = 46875) (
     input  wire               clk,
     input  wire               rst_n,
-    input  wire               sample_en,
+    input  wire               frame_tick,
     input  wire [6:0]         note,
     input  wire signed [3:0]  bend,
     input  wire [1:0]         timbre,
@@ -118,7 +120,7 @@ module osc #(parameter FS_HZ = 46875) (
             valid_r <= 1'b0;
         end else begin
             valid_r <= 1'b0;
-            if (sample_en) begin
+            if (frame_tick) begin
                 phase   <= phase + fcw_bent;                    // 相位累加：加得快 = 音高
                 wave_r  <= wave_of(timbre, phase, lut_dout);    // 用当前相位取波形
                 valid_r <= 1'b1;

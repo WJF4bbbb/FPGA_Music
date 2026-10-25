@@ -13,7 +13,7 @@ module tb_osc_timbre;
 
     reg clk = 1'b0;
     reg rst_n = 1'b0;
-    reg        sample_en = 1'b1;      // 每个时钟出一个样本，测周期用样本数就够了
+    reg        frame_tick = 1'b1;      // 每个时钟出一个样本，测周期用样本数就够了
     reg [6:0]  note = 7'd60;
     reg signed [3:0] bend = 4'sd0;
     reg [1:0]  timbre = 2'd0;
@@ -41,7 +41,7 @@ module tb_osc_timbre;
     always #5 clk = ~clk;
 
     osc #(.FS_HZ(46875)) dut (
-        .clk(clk), .rst_n(rst_n), .sample_en(sample_en),
+        .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick),
         .note(note), .bend(bend), .timbre(timbre),
         .wave(wave), .valid(valid)
     );

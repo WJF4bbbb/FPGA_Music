@@ -7,6 +7,7 @@ module tb_adsr;
 
     reg clk = 1'b0;
     reg rst_n = 1'b0;
+    reg frame_tick = 1'b0;                 // V1.1 新增：帧节拍，用于定格 gate/trigger
     reg wave_valid = 1'b0;
     reg signed [15:0] wave = 16'sd16384;   // 恒定输入，方便从输出反推包络电平
     reg gate = 1'b0;
@@ -26,16 +27,18 @@ module tb_adsr;
     always #5 clk = ~clk;
 
     adsr #(.FS_HZ(46875)) dut (
-        .clk(clk), .rst_n(rst_n),
+        .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick),
         .wave_valid(wave_valid), .wave(wave),
         .gate(gate), .trigger(trigger),
         .sample(sample), .valid(valid), .busy(busy), .env_done(env_done)
     );
 
-    // 每 4 个时钟产生一个样本使能（真实系统里是 576，这里缩小以便快速仿真）
+    // 每 4 个时钟一个样本：frame_tick 比 wave_valid 早一拍，
+    // 对应真实系统里 audio_timing 先给 frame_tick、osc 下一拍才吐 valid。
     always @(posedge clk) begin
-        clk_cnt <= clk_cnt + 1;
-        wave_valid <= ((clk_cnt % 4) == 0);
+        clk_cnt     <= clk_cnt + 1;
+        frame_tick  <= ((clk_cnt % 4) == 3);
+        wave_valid  <= ((clk_cnt % 4) == 0);
     end
 
     // 采样计数 + 状态迁移日志
@@ -113,7 +116,9 @@ module tb_adsr;
         $display("  -- retrigger while holding --");
         @(negedge clk); trigger = 1'b1;
         @(negedge clk); trigger = 1'b0;
-        repeat (4) @(posedge clk);
+        // V1.1：trigger 先进 trig_lat，等下一个 frame_tick 才并入快照，
+        // 再过一拍 wave_valid 才更新包络 —— 所以最多要等 6~8 拍才看到 ATTACK。
+        repeat (8) @(posedge clk);
         if (dut.state !== 3'd1) begin
             $display("  FAIL  retrigger did not restart attack (state=%0d)", dut.state);
             errors = errors + 1;
