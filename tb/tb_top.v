@@ -3,7 +3,7 @@
 // A组阶段性集成测试。下方B/C替身仅提供接口和可注入信号，不能综合。
 module tb_top;
     parameter NVOICE=4;
-    reg clk=0,rst_n=0,test_enable=0;
+    reg clk=0,rst_n=1,test_enable=0;
     reg [7:0] key_raw=0;
     reg timbre_key=0,bend_up_key=0,bend_down_key=0,volume_up_key=0,volume_down_key=0;
     wire bclk,lrclk,i2s_data;
@@ -128,6 +128,9 @@ module tb_top;
     end endgenerate
     initial begin
         $dumpfile("sim/tb_top.vcd");$dumpvars(0,tb_top);
+        // Assert before the first clk edge, including the derived core reset.
+        // Avoid checking uninitialized core_rst_n on the first monitor cycle.
+        #1 rst_n=0;
         force dut.u_voice_alloc.voice_gate=injected_gate;
         force dut.u_voice_alloc.voice_trigger=injected_trigger;
         start_mode(0);
