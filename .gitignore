@@ -16,3 +16,17 @@ __pycache__/
 # Operating system files
 Thumbs.db
 .DS_Store
+
+# Icarus Verilog compiled outputs
+sim/*.vvp
+
+# Editor generated files
+.dide/
+**/.dide/
+
+# Gowin generated outputs and personal settings
+**/impl/
+*.gprj.user
+
+# Obsolete duplicate source
+gowin/**/src/test_mode.v
