@@ -52,3 +52,36 @@
 - 真实sources.f全机编译仍因B/C未完成而失败，符合当前分工边界；不得把替身顶层PASS当成整机通过。
 - 修正交付卫生：忽略sim/*.vvp与检查临时文件；增加shell脚本LF规则；交接说明另存docs/handoff.md，使其能随本仓库push。总目录原交接说明仍保留。
 - .dide二进制缓存已被旧仓库跟踪且有本地变化，本次未撤销或暂存，提交时应排除。
+
+## C 组单元仿真（2026-10-24）
+
+- 负责人：C。模块：sensor_frontend / control_panel / note_event（rtl/ 下三个 RTL）。
+- 工具：iVerilog（FPGAwars toolchain v1.1.1，Windows 版，已落地于 D:\iverilog\bin），-g2001 -Wall；仿真引擎 vvp。
+  说明：C 组三个模块均为纯 RTL（无 Gowin IP 原语）。本机 Gowin EDA（V1.9.12.04）现已**授权可用**（gw_sh 不再报 License 错误）。但经核查，Gowin 功能（RTL）仿真依赖外部第三方仿真器（ModelSim/Questa 等），本安装未捆绑、gw_sh 也无仿真命令，故功能仿真仍用独立 iVerilog 完成；Gowin 在本机真正可无头跑的引擎是**综合**（GowinSynthesis.exe），已对三模块做综合冒烟，见下方"Gowin 综合"。
+- 命令（交接 §6 的单元编译方式；脚本见仓库根 run_sim_c.bat / run_sim_c.sh，默认指向 D:\iverilog\bin，可用 IVL 环境变量覆盖）：
+  `iverilog -g2001 -Wall -s tb_xxx -o sim/tb_xxx.vvp rtl/xxx.v tb/tb_xxx.v` 后 `vvp sim/tb_xxx.vvp`
+- 实际结果（三套 tb 均 PASS，vvp 退出码 0，已生成 VCD）：
+  - tb_sensor_frontend：8 路两级同步 + 滤波；T1 单键保持接受、T2 短于滤波的毛刺拒绝、T3 多键独立滤波无互掩；FILT 参数覆盖为 4（真实 5400 拍）以加速仿真。波形 sim/tb_sensor_frontend.vcd。
+  - tb_control_panel：复位 gain=16384；timbre 单次切换（长按不重复）；bend 实时 ±2/0 电平编码；volume 单步 4096、高低端钳位无回绕；CTRL_FILT 覆盖为 4（真实约 27 万拍 @27MHz）。波形 sim/tb_control_panel.vcd。
+  - tb_note_event：T1 复位释放即识别按下（prev 复位为 0，满足 V1.1 §2"复位释放时已按住的键识别为一次按下"）；T2 单键按下/松开；T3 同批先松后按再按 key_id 升序；T4 背压保持整条事件（ready=0 时不丢，valid 与字段保持）；T5 FIFO 满显式 overflow 计数、不静默丢弃。波形 sim/tb_note_event.vcd。
+- 本日修复：note_event 原 DETECT&PUSH 在 FIFO 满丢弃事件后仍无条件推进 prev_key_state，会导致被丢弃的 note_off 永久丢失、下游声部状态永久错位。改为**位级 prev 更新**——仅成功 push 的 bit 推进 prev，满时未处理的 bit 下一拍自动重试，溢出只计数、不丢语义。修复后 T5 仍 PASS。
+- 限制：以上为 C 组三个模块的独立单元仿真，**不是整机验收**；未接入 B 组/真实 top、未做 Gowin 综合/STA/板测、未测整机 ≤10ms 延迟；tb 中 FILT/CTRL_FILT 为加速参数，不等于正式滤波拍数。不得把单元 PASS 写成整机通过。
+- 代码状态：本地未提交（git 仓库工作区，branch 待建）。提交前应先做 diff，避免夹带其他成员未提交文件。
+
+## C 组 Gowin 综合冒烟（2026-10-24）
+
+- 工具：Gowin EDA V1.9.12.04，综合引擎 `IDE/bin/GowinSynthesis.exe`（命令行，license 现已生效）。
+  器件：Tang Nano 20K = **GW2A-LV18PG256C8/I7**（GW2A-18，PBGA256，C8/I7；器件库确认）。约束：功能综合无需引脚/时序约束，未用 `constraints/top.cst`、`top.sdc`（二者仍是空模板，handoff 已说明）。
+- 命令（每模块单独作为顶层综合，纯 RTL 直接吃源文件）：
+  `GowinSynthesis.exe -i rtl/<m>.v -top <m> -pn GW2A-LV18PG256C8/I7 -verilog_language verilog-2001 -o syn_out/<m>.edf`
+- 实际结果：三模块**均 EXIT=0、0 错误、0 警告**，生成 EDF 网表 + 报告（syn_out/）；note_event 正确识别并提取 3 块 RAM（fifo_key/fifo_note/fifo_on，32 深，最终以分布式/LUT-RAM 实现，BSRAM 占用 0）。
+- 资源占用（GW2A-18 总量 20736 LUT / 15552 Reg，占比均 <10%）：
+
+  | 模块 | Reg(FF) | LUT | ALU | BSRAM | I/O |
+  |---|---|---|---|---|---|
+  | sensor_frontend | 128 | 232 | — | 0 | 18 |
+  | control_panel | 121 | 212 | — | 0 | 29 |
+  | note_event | 376 | 1878 | 44 | 0 | 55 |
+
+- 结论：三模块在 Gowin 器件库下可综合、无推断锁存器、无未约束时钟告警；iVerilog 功能 PASS 与 Gowin 综合 PASS 相互印证。注意这是**模块级综合冒烟**，不是整机综合/布局布线/STA；整机综合仍需等 B/C 完成、A 迁移 sources.f 与 top、并补齐真实引脚/时序约束后方可进行。
+- 代码状态：本地未提交；syn_out/ 产物为综合中间文件，建议加入 .gitignore 或提交前排除。

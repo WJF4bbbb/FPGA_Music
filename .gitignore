@@ -5,6 +5,9 @@ sim/*.tmp
 sim/*.fst
 sim/*.wlf
 
+# Gowin synthesis output
+syn_out/
+
 # Temporary files
 *.log
 *.tmp
