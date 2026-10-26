@@ -1,5 +1,7 @@
 # Simulation output
 sim/*.vcd
+sim/*.vvp
+sim/*.tmp
 sim/*.fst
 sim/*.wlf
 
