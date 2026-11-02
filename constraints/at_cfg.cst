@@ -1,0 +1,39 @@
+// ============================================================================
+// at_cfg.cst —— AT 配置专用顶层的引脚约束（独立文件，不动主工程的 cst）
+//
+// 【与主工程的差异】只用了 4 个功能脚 + 6 个 LED，其余全部留空。
+//
+// 【LED 15..20 的说明】
+//   依据 docs/integration/Board_IO_Change_Report.md：15/16/17/18/19/20 经约
+//   510 Ω 限流电阻接板载 LED。这是审计报告里的结论，不是猜的；但如果你的
+//   PCB 版本不同，先用万用表或点灯确认一遍再依赖它。
+//
+// 【极性】板载 LED 低电平点亮，顶层用 LED_ACTIVE_LOW=1 反相。
+// ============================================================================
+
+IO_LOC "clk" 4;
+IO_PORT "clk" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+IO_LOC "rst_n" 73;
+IO_PORT "rst_n" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// 发：FPGA -> HC-05 RXD。空闲高，DRIVE=8 足够驱动模块输入
+IO_LOC "at_tx" 85;
+IO_PORT "at_tx" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+
+// 收：HC-05 TXD -> FPGA。必须上拉：模块没接时保持空闲高，不会误判起始位
+IO_LOC "at_rx" 77;
+IO_PORT "at_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+IO_LOC "led[0]" 15;
+IO_PORT "led[0]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "led[1]" 16;
+IO_PORT "led[1]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "led[2]" 17;
+IO_PORT "led[2]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "led[3]" 18;
+IO_PORT "led[3]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "led[4]" 19;
+IO_PORT "led[4]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "led[5]" 20;
+IO_PORT "led[5]" IO_TYPE=LVCMOS33 DRIVE=8 BANK_VCCIO=3.3;
