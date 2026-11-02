@@ -207,7 +207,7 @@
 
   window.addEventListener('DOMContentLoaded', function () {
     build();
-    var demo = /[?&]demo=1/.test(location.search);
+    var demo = window.__DEMO__ === true || /[?&]demo=1/.test(location.search);
     if (demo) {
       startDemo();
       var h = document.querySelector('#displayPanel h2');

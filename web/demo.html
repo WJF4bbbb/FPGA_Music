@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>实时状态 · 演示模式（无需板子）</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --line: #2c313a;
+    --text: #e8eaed; --dim: #8b93a1; --warn: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  #tip {
+    margin: 0; padding: 10px 20px; background: rgba(255,176,32,.10);
+    border-bottom: 1px solid var(--line); color: var(--warn); font-size: 12px;
+  }
+  #tip b { font-weight: 500; }
+  main { padding: 16px 20px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px;
+    max-width: 760px; margin: 0 auto;
+  }
+  section > h2 {
+    margin: 0 0 14px; font-size: 13px; font-weight: 500; color: var(--dim);
+    letter-spacing: .04em;
+  }
+  #status { display: none; }
+</style>
+</head>
+<body>
+
+<p id="tip">
+  <b>演示模式</b> —— 数据是脚本假造的，每 0.6 秒换一个键、音色自动轮换、音量来回摆，
+  用来调排版和动画，<b>不代表真实板子状态</b>。改完 <code>js/display.js</code> 按 F5 就生效。
+  要看真实数据请打开 <code>index.html</code>。
+</p>
+
+<main>
+  <section id="displayPanel">
+    <h2>实时状态</h2>
+  </section>
+</main>
+
+<span id="status">演示</span>
+
+<script>window.__DEMO__ = true;</script>
+<script src="js/serial.js"></script>
+<script src="js/display.js"></script>
+</body>
+</html>
