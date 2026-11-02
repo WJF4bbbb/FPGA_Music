@@ -42,17 +42,27 @@
 ```
 rtl/top.v
 gowin/MusicSynth_TangNano20K/src/MusicSynth_TangNano20K.cst
+gowin/MusicSynth_TangNano20K/MusicSynth_TangNano20K.gprj
 sources.f
 web/index.html
 web/js/serial.js
 ```
 
-这五个已经由我改好并冻结。里面已经写好：
+这六个已经由我改好并冻结。里面已经写好：
 - `top.v` 的两个新端口、蓝牙信号、事件三选一、三个模块例化
 - `cst` 的两行引脚约束
+- `gprj` 的四个新文件登记（`uart_rx` / `uart_tx` / `bt_cmd_parse` / `telemetry`）
 - `sources.f` 的四个新文件
 - `web/index.html` 骨架（顶部状态栏 + 左右两块面板）
 - `web/js/serial.js` 串口收发、帧解析、CRC8、三个对外函数
+
+> **`gprj` 为什么也算冻结**：它是 Gowin 工程的"目录页"，综合器只编译里面列出的文件。
+> 你新加的任何 `.v` 想参与综合，都得登记进去。但它是 XML，git 按行合并，
+> **两边同时改同一段必然冲突**。所以约定：**`gprj` 只在 `bt-out` 分支改**。
+>
+> 队友如果新建了额外文件（比如拆出来的 `bt_keymap.v`），**不要自己改 `gprj`**，
+> 在 `bt-in` 的提交说明里写一句"新增 rtl/xxx.v，需登记 gprj"，
+> 合并时由我在 `bt-out` 上一行加完即可。
 
 **`web/js/input.js` 和 `web/js/display.js` 已经有一个能跑的最小版本**，
 不是空白。你直接在它基础上加功能就行，不用从零写。
@@ -215,10 +225,13 @@ git merge origin/feature/bt-out   # 或先完成的那一方
 # 4. 因为改的是不同文件，正常情况零冲突
 ```
 
-**如果 Git 报冲突**，只可能是有人碰了第 4 节那五个文件。直接回滚那个文件：
+**如果 Git 报冲突**，只可能是有人碰了第 4 节那六个冻结文件。直接回滚那个文件：
 ```bash
 git checkout --ours rtl/top.v
 ```
+
+**如果综合报"找不到模块 `xxx`"**，不是冲突，是有人新建了 `.v` 但没登记 `gprj`。
+让他在 `bt-out` 上加一行即可，**不要两个分支各加一次**。
 
 ---
 
