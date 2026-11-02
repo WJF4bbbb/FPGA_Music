@@ -347,21 +347,27 @@ function addTimbreBar(panel) {
 
 ---
 
-## 14. 队友开工三步
+## 14. 队友开工（两条命令）
+
+分支**已经建好并推到远程**，不用自己开：
 
 ```bash
 # 1. 拉取
 git fetch origin
 
-# 2. 从脚手架开自己的分支
-git checkout -b feature/bt-in origin/feature/bt-out
-
-# 3. 只改这两个文件
-#    rtl/uart_rx.v
-#    rtl/bt_cmd_parse.v
+# 2. 切到自己的分支
+git checkout feature/bt-in
 ```
 
-网页那边改 `web/js/input.js`。
+切过去之后，脚手架、四个空壳、网页骨架、这份文档全都在里面。
+
+**你只改这三个文件：**
+
+```
+rtl/uart_rx.v          ← 串口接收
+rtl/bt_cmd_parse.v     ← 命令解析，产出音符事件
+web/js/input.js        ← 虚拟键盘（已有最小版本，在此基础上扩展）
+```
 
 **自检命令**（改完必须跑，两条都过才能提交）：
 
@@ -373,4 +379,12 @@ iverilog -g2005 -s top -o /tmp/t.vvp rtl/*.v
 iverilog -g2012 -s tb_top_integration -o /tmp/tbi.vvp \
   tb/tb_top_integration.v tb/ttp229_model.v rtl/*.v
 vvp /tmp/tbi.vvp | grep -E "PASS|FAIL"
+```
+
+**推自己的分支**（不要推 integration）：
+
+```bash
+git add rtl/uart_rx.v rtl/bt_cmd_parse.v web/js/input.js
+git commit -m "[bt-in] 实现串口接收与命令解析"
+git push origin feature/bt-in
 ```
