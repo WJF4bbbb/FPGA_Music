@@ -327,26 +327,59 @@
   }
 
   // ------------------------------------------------------------ 演示模式
+  // 严格照着 control_panel.v 的真实行为造数据：
+  //   音色  TP8 上升沿才切，而且只在 0/1 之间来回（当前固件只暴露两种）
+  //   弯音  按住 TP11 期间恒为 +2，松开回 0（电平型，不是按一次变一次）
+  //   音量  按一下 ±4096，钳位 0~65535，复位值 16384
   function startDemo() {
     var t = 0;
+    var timbre = 0;
+    var gain = 16384;
+    var tp8Prev = false, tp9Prev = false, tp10Prev = false;
+
     setInterval(function () {
       t++;
+
+      // 音符键：TP0~TP7 轮流，每 18 帧换一个
       var step = Math.floor(t / 18) % 8;
+
+      // TP8 音色：每 45 帧按下 6 帧，只在上升沿切一次
+      var tp8 = (t % 45) < 6;
+      if (tp8 && !tp8Prev) timbre = timbre ? 0 : 1;
+      tp8Prev = tp8;
+
+      // TP9 / TP10 音量：每 90 帧按一次，步进 4096，钳位不回绕
+      var tp9  = (t % 90) >= 80;
+      var tp10 = (t % 90) >= 85;
+      if (tp9  && !tp9Prev)  gain = Math.min(65535, gain + 4096);
+      if (tp10 && !tp10Prev) gain = Math.max(0, gain - 4096);
+      tp9Prev = tp9;
+      tp10Prev = tp10;
+
+      // TP11 弯音：每 70 帧按住 10 帧，按住期间 +2，松开回 0
+      var tp11 = (t % 70) < 10;
+
+      // 和弦：每 60 帧里前 22 帧叠三个音，让瀑布有层次
+      var chord = (t % 60) < 22;
       var notes = [SCALE[step], 0, 0, 0];
       var gates = 1;
-      // 每两秒叠一个三和弦，让瀑布有层次
-      if (t % 60 < 22) {
+      if (chord) {
         notes[1] = SCALE[(step + 2) % 8];
         notes[2] = SCALE[(step + 4) % 8];
         gates = 7;
       }
+
       onStatus({
-        touchKeys: (1 << step) | ((t % 120 < 60) ? (1 << 8) : (1 << 11)),
+        touchKeys: (1 << step) |
+                   (tp8  ? (1 << 8)  : 0) |
+                   (tp9  ? (1 << 9)  : 0) |
+                   (tp10 ? (1 << 10) : 0) |
+                   (tp11 ? (1 << 11) : 0),
         notes: notes,
         gates: gates,
-        timbre: Math.floor(t / 60) % 4,
-        bend: (Math.floor(t / 40) % 5) - 2,
-        gain: 32768 + Math.round(20000 * Math.sin(t / 30)),
+        timbre: timbre,
+        bend: tp11 ? 2 : 0,
+        gain: gain,
         clip: (t % 240 < 4) ? Math.floor(t / 240) + 1 : 0
       });
     }, 33);
