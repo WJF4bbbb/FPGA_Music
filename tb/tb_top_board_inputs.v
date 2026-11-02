@@ -5,6 +5,8 @@ module tb_top_board_inputs;
     reg clk=0,rst_n=0,test_enable=0;
     reg [15:0] touch=0;
     wire ttp_scl,ttp_sdo,bclk,lrclk,i2s_data,pa_en;
+    wire uart_rx_pin=1'b1;   // 串口空闲高，蓝牙不接管
+    wire uart_tx_pin;
     top #(.TTP_STARTUP_CYCLES(20),.TTP_SCL_HALF_CYCLES(10),
           .TTP_FRAME_GAP_CYCLES(300),.TOUCH_CTRL_FILT(4)) dut(.*);
     ttp229_model #(.DATA_DELAY_NS(20),.TIMEOUT_NS(2000)) chip(

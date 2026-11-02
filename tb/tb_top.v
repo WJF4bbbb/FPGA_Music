@@ -16,7 +16,7 @@ module tb_top;
     reg [10:0] held_event;
     top #(.NVOICE(NVOICE)) dut (
         .clk(clk),.rst_n(rst_n),.ttp_scl(ttp_scl),.ttp_sdo(ttp_sdo),
-        .test_enable(test_enable),.bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data),.pa_en(pa_en)
+        .test_enable(test_enable),.uart_rx_pin(1'b1),.bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data),.pa_en(pa_en)
     );
     always #18.519 clk=~clk;
     task check;
