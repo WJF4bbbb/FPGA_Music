@@ -155,9 +155,31 @@ AT+UART=115200,0,0
 
 ### 6.1.1 没有 USB-TTL 怎么发 AT 命令
 
-两条路，任选：
+**首选：直接用已经写好的 `at_cfg` 工程（A 做的，不用自己写代码）**
 
-**路 A：用板载的 USB 转串口（推荐，不用买任何东西）**
+仓库里有一个**独立**的 Gowin 工程 `gowin/at_cfg/at_cfg.tcl`，专门干这一件事：
+FPGA 自己当串口助手，自动发 `AT` → `AT+UART?` → `AT+UART=115200,0,0`，
+超时自动重试，结果用 6 个 LED 显示。
+
+它和主工程完全隔离——`rtl/bt_at_init.v` 和 `rtl/top_at_cfg.v` 既没登记进
+`sources.f`，也没登记进主 `gprj`，所以**不会影响音乐合成器的综合结果**。
+
+| 文件 | 作用 |
+|---|---|
+| `rtl/bt_at_init.v` | 38400 位转发器 + 三条 AT 命令 + 超时重试 + LED 指示 |
+| `rtl/top_at_cfg.v` | 独立顶层，只做上电复位和 LED 极性，不接音频/TTP229/I2S |
+| `constraints/at_cfg.cst` | `clk=4  rst_n=73  at_tx=85  at_rx=77  led=15..20` |
+| `tb/tb_bt_at_init.v` | TB 扮演模块回 `OK`，逐字节比对发出的 34 字节；另测断开回复走重试→fail |
+| `docs/at_cfg.md` | 上板步骤、电平风险、LED 判读表、排查表 |
+
+操作：用 Gowin IDE 打开 `gowin/at_cfg/at_cfg.tcl`，综合、烧录，看 LED 判读。
+**烧完记得把主工程的比特流烧回去**，不然板子就停在 AT 配置模式了。
+
+细节和 LED 判读表看 `docs/at_cfg.md`，不要照本文档猜。
+
+---
+
+**备选 A：借板载 BL616 当 USB 转串口**
 
 Tang Nano 20K 板上那颗 BL616 已经把 USB 桥到了 FPGA 的 UART：
 
@@ -173,8 +195,9 @@ Tang Nano 20K 板上那颗 BL616 已经把 USB 桥到了 FPGA 的 UART：
 3. 电脑上开串口助手连板子的 COM 口，38400 8N1，发 AT 命令
 
 ⚠️ 这条路要先烧一个透传固件，改完 AT 之后**必须把原来的正式固件烧回去**，不然板子就是个 USB 转串口了。
+既然 `at_cfg` 已经做好了，这条路一般用不上，留着应急。
 
-**路 B：找个 USB-TTL 模块 / 或者用 Arduino 的 TX RX 顶一下**
+**备选 B：找个 USB-TTL 模块 / 或者用 Arduino 的 TX RX 顶一下**
 
 任何能输出 3.3V TTL 串口的东西都行。注意电平必须是 3.3V，5V 的要分压。
 
