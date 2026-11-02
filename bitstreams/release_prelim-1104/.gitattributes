@@ -1,0 +1,10 @@
+# 本目录的 .fs 是二进制比特流，必须逐字节原样保存。
+#
+# 为什么需要这个文件：仓库根的 .gitattributes 只有一条精确路径规则
+#   /bitstreams/MusicSynth_TangNano20K.fs -text -diff -merge
+# 管不到子目录。而 `* text=auto` 会让 git 把 .fs 误判成文本，
+# 提交时把 CR 当换行符吃掉——实测 7,264,153 字节变成 7,262,007 字节，
+# 少了 2146 字节，烧进去是坏的。
+#
+# 放在子目录里的 .gitattributes 只作用于本目录，不影响仓库其他部分。
+*.fs -text -diff -merge

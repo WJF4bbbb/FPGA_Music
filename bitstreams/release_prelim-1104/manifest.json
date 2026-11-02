@@ -1,0 +1,75 @@
+{
+  "Release": "prelim-1104",
+  "Branch": "release/prelim-1104",
+  "SourceCommit": "56d37825f0e0f4568a30bc5982e6f68cca28c1e4",
+  "GeneratedAt": "2026-11-02T21:00:35+08:00",
+  "Files": {
+    "MusicSynth_TangNano20K.fs": {
+      "Role": "main firmware: 4 voices, 4 timbres, BT telemetry out + BT virtual input in",
+      "SHA256": "E8B0CBB6524012532B7C8B1C9796CCD12C13CBC7CCD848160F57A5572288A843",
+      "Bytes": 7264153,
+      "ProgramMode": "-r 9 exFlash Erase,Program,Verify"
+    },
+    "at_cfg.fs": {
+      "Role": "one-shot tool: drives HC-05 from 9600 to 115200 via AT commands",
+      "SHA256": "7EF78463E93467C8FA6A00DFDACDB6B073AE0AFDA0243C35323C7D864663F4F7",
+      "Bytes": 4620697,
+      "ProgramMode": "-r 2 SRAM Program (do NOT use -r 9; SRAM keeps flash untouched)",
+      "Top": "top_at_cfg",
+      "Pins": "clk=4 rst_n=73 at_tx=85 at_rx=77 led[0..5]=15..20"
+    }
+  },
+  "Device": "GW2AR-LV18QN88C8/I7",
+  "ClockHz": 27000000,
+  "SampleRateHz": 46875,
+  "Channels": 2,
+  "SampleBits": 16,
+  "Voices": 4,
+  "Timbres": [
+    "sine",
+    "square",
+    "saw",
+    "triangle"
+  ],
+  "Resources": {
+    "Logic": "4804/20736 (24%)",
+    "Register": "1635/15750 (11%)",
+    "CLS": "2882/10368 (28%)",
+    "BSRAM": "4/46",
+    "DSP": "6.5/24"
+  },
+  "Timing": {
+    "Fmax_MHz": 29.08,
+    "Constraint_MHz": 27.0,
+    "TNS_Setup": 0.0,
+    "TNS_Hold": 0.0,
+    "WorstSetupSlack_ns": 2.649
+  },
+  "Warnings": [
+    "NL0002 sin_rom swept x4 (implemented in BSRAM, not removed)",
+    "PR1014 clk_d uses generic routing (harmless at 27 MHz)"
+  ],
+  "Verification": "26 testbenches PASS / 0 FAIL (bash tools/run_all_tb.sh)",
+  "SourceHashConvention": "SHA256 after CRLF-to-LF normalization; paths are repository-relative.",
+  "SourceHashesNormalizedLF": {
+    "constraints/top.sdc": "894C2A0D74F33A3565ABC80BABA410AB5DC741ABD73C159E02007F7909E3BE41",
+    "gowin/MusicSynth_TangNano20K/src/MusicSynth_TangNano20K.cst": "A0B178AFAC6EF688F0B70E269E84D950D985D40FB80EC5B527571A24AE0D123C",
+    "rtl/adsr.v": "36B0B6A6413BC39DC7EA72C0D89E97C1EEBAFAEF58D26D7057FC5E5DA6C8D20F",
+    "rtl/audio_timing.v": "771FCFEE63E6A3DCBF6C4CFC6FB7BE73B0902CC7CC053B9C70BCEF0DEA6AAD25",
+    "rtl/bt_cmd_parse.v": "8D64DA0E51C1AE758F6D17CEF6AAFAA6DDD52956F36C1203F6FD26266470A0B1",
+    "rtl/control_panel.v": "515A1462050BAD82A470215FA31891347502995EC953438DDF42B1E0E651E23E",
+    "rtl/i2s_tx.v": "F2F161CA9D142161F89D72CCBB78B7C807581CDBBC7476CFFFB063D4EE7049AE",
+    "rtl/mixer.v": "2B7F1909E0E01E24F3E095B35E6D28131CFF0317585E82E079BEA219EE120FF1",
+    "rtl/note_event.v": "9D39468DDB8B985FE0C2BE3708CDC18352C6DB858F33EEE159ECB413385C5B5F",
+    "rtl/osc.v": "FA3C083DB61B2EEC1A4C58C9DF9CFB3337A3C006F556BC59D5FEF78066E2DB08",
+    "rtl/sensor_frontend.v": "2160C4F8EC1E768E3CB6548DAD87B98158654B2CB6E430FCD11348551A92F577",
+    "rtl/sin_rom.v": "519D00447EA2F5FE29721ECCA3D8E1D5881293CC8D5DB9CE5BA83DFBDDCF4639",
+    "rtl/telemetry.v": "30300365F07F52471374C86FDFFE9210DCBD600BBE950B192A92E16FB32DECF5",
+    "rtl/test_mode.v": "C2CD8C6D292CF26C1F3B828F769ECDB1E7D4DAEF9F509523F7B5BA654F35B678",
+    "rtl/top.v": "177C217C13206C7B95D6675132D870257DFC00A707C2F3D33F7B514C1963FD69",
+    "rtl/ttp229_reader.v": "A89343EEE7C876D06ACED1559738C4B2BDB7792FCE02CF704D523C563C9493D0",
+    "rtl/uart_rx.v": "5D2FCB1AA437381D56C2A5E2EC12EA1F11BFCBCC9C66705D379564B132731DFB",
+    "rtl/uart_tx.v": "17AFFBD8BA0428730A6E956AFF30A962D0F569543806143F15AF2AF385BA6C24",
+    "rtl/voice_alloc.v": "C6A52231E8A235B364C258AEA46668308606B1A8B06550BF3DB154641F216D16"
+  }
+}
