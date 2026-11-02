@@ -270,3 +270,107 @@ python -m http.server 8000
 
 **验证协议是否通**：连上后如果右边"实时状态"开始每帧刷新（音色、音量有数字），说明板子在正常发帧。
 如果一直是 `—`，说明板子没在发，或者波特率不对。
+
+---
+
+## 12. 功能边界（先划清，避免做到一半发现要改架构）
+
+**蓝牙这一期只做两件事：**
+
+| 做 | 不做 |
+|---|---|
+| ✅ 虚拟音符输入（按下/松开，键号 0~7） | ❌ 蓝牙切音色 |
+| ✅ 状态回传（键位图、音高、gate、音色、弯音、音量、削顶） | ❌ 蓝牙调音量 |
+| | ❌ 蓝牙控弯音 |
+
+**为什么不做音色/音量/弯音的蓝牙控制**：这三个在现有架构里是由 `control_panel` 读取 TP8~TP12 的**按键事件**来循环切换的，不是"直接设值"。要让蓝牙改它们，就得再改 `top.v` 的 `normalized_panel` 通路，等于第二次动架构。
+
+初赛前不值得。想切音色就用触摸板的 TP8，那个已经能用。
+
+**回传里带上 `timbre` / `bend` / `gain` 只是"让你看到当前值"，不是"让你改"。**
+
+---
+
+## 13. 网页怎么加功能而不冲突（重点看这节）
+
+### 13.1 核心规则：不写 HTML，全部用 JS 动态生成
+
+`web/index.html` 里只有两个空容器：
+
+```html
+<section id="inputPanel"></section>    ← input.js 独占
+<section id="displayPanel"></section>  ← display.js 独占
+```
+
+**两个人都不改 `index.html`。** 所有 DOM 和 CSS 都在自己的 JS 里用 `createElement` 和 `appendChild` 生成 —— 现有代码已经是这个写法，照着加就行。
+
+示例（在 input.js 里加一个音色按钮区）：
+
+```js
+function addTimbreBar(panel) {
+  var bar = document.createElement('div');
+  bar.className = 'timbre-bar';
+  ['正弦','方波','锯齿','三角'].forEach(function (n, i) {
+    var b = document.createElement('button');
+    b.textContent = n;
+    b.onclick = function () { /* 你的逻辑 */ };
+    bar.appendChild(b);
+  });
+  panel.appendChild(bar);
+
+  var css = document.createElement('style');
+  css.textContent = '#inputPanel .timbre-bar{display:flex;gap:8px;margin-top:12px}';
+  panel.appendChild(css);
+}
+```
+
+这样两人各写各的 CSS，**类名都带 `#inputPanel` 或 `#displayPanel` 前缀**，永远不会互相覆盖。
+
+### 13.2 唯一可能撞的地方
+
+| 位置 | 会不会撞 | 怎么避免 |
+|---|---|---|
+| `index.html` | 🔴 会 | **谁都别改** |
+| `serial.js` | 🔴 会 | **谁都别改** |
+| `input.js` | 🟢 不会 | 只有 bt-in 碰 |
+| `display.js` | 🟢 不会 | 只有 bt-out 碰 |
+| CSS 类名 | 🟡 可能 | 统一加 `#inputPanel` / `#displayPanel` 前缀 |
+
+`serial.js` 提供的三个函数已经够用，**不需要加新的**（因为不做音色/音量控制）。
+
+### 13.3 如果确实需要新的串口命令
+
+比如队友想加"一键播放旋律"。那**不要自己改 `serial.js`**，而是：
+
+1. 在 `input.js` 里用 `Serial.sendNote()` 循环调用（最简单的做法，够用）
+2. 如果真需要新命令类型，先跟我说，我改 `serial.js` 并同步给另一个人
+
+---
+
+## 14. 队友开工三步
+
+```bash
+# 1. 拉取
+git fetch origin
+
+# 2. 从脚手架开自己的分支
+git checkout -b feature/bt-in origin/feature/bt-out
+
+# 3. 只改这两个文件
+#    rtl/uart_rx.v
+#    rtl/bt_cmd_parse.v
+```
+
+网页那边改 `web/js/input.js`。
+
+**自检命令**（改完必须跑，两条都过才能提交）：
+
+```bash
+# 编译
+iverilog -g2005 -s top -o /tmp/t.vvp rtl/*.v
+
+# 整机回归（必须仍然 PASS）
+iverilog -g2012 -s tb_top_integration -o /tmp/tbi.vvp \
+  tb/tb_top_integration.v tb/ttp229_model.v rtl/*.v
+vvp /tmp/tbi.vvp | grep -E "PASS|FAIL"
+```
