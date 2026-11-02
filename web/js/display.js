@@ -183,9 +183,38 @@
     frameCount = 0;
   }
 
+  // ---- 演示模式：不接板子、不连蓝牙，也能调界面 ----
+  // 用法：在网址后面加 ?demo=1
+  //   file:///.../web/index.html?demo=1
+  //   http://localhost:8000/web/?demo=1
+  // 数据是假造的，只为看排版和动画，不代表真实板子状态。
+  function startDemo() {
+    var t = 0;
+    setInterval(function () {
+      t++;
+      var key = Math.floor(t / 18) % 8;           // 每约 0.6 秒换一个键
+      onStatus({
+        touchKeys: (1 << key) | (1 << 8),         // 顺便点亮"音色"键
+        notes: [60 + key, 64 + key, 67 + key, 0],
+        gates: 7,                                  // 声部 0/1/2 发声
+        timbre: Math.floor(t / 60) % 4,
+        bend: (Math.floor(t / 40) % 5) - 2,
+        gain: 32768 + Math.round(20000 * Math.sin(t / 30)),
+        clip: (t % 200 < 6) ? Math.floor(t / 200) + 1 : 0
+      });
+    }, 33);
+  }
+
   window.addEventListener('DOMContentLoaded', function () {
     build();
-    Serial.onFrame(onStatus);
+    var demo = /[?&]demo=1/.test(location.search);
+    if (demo) {
+      startDemo();
+      var h = document.querySelector('#displayPanel h2');
+      if (h) h.textContent = '实时状态（演示数据 · 非真实板子）';
+    } else {
+      Serial.onFrame(onStatus);
+    }
     window.addEventListener('beforeunload', clearAll);
   });
 })();
