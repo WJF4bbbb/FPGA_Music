@@ -28,3 +28,11 @@ IO_LOC "ttp_scl" 27;
 IO_PORT "ttp_scl" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
 IO_LOC "ttp_sdo" 28;
 IO_PORT "ttp_sdo" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// 蓝牙链路（HC-05）。TX=85(J6-4) -> HC-05 RXD；RX=77(J6-5) <- HC-05 TXD。
+// 两脚均避开 PIN75_SPI_MISO 与板载 SYS_LED。
+// RX 必须上拉：模块未接时保持空闲高，不会误判为起始位。
+IO_LOC "uart_tx_pin" 85;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "uart_rx_pin" 77;
+IO_PORT "uart_rx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;

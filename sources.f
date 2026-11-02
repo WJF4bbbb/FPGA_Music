@@ -11,3 +11,7 @@ rtl/sensor_frontend.v
 rtl/control_panel.v
 rtl/note_event.v
 rtl/ttp229_reader.v
+rtl/uart_rx.v
+rtl/uart_tx.v
+rtl/bt_cmd_parse.v
+rtl/telemetry.v

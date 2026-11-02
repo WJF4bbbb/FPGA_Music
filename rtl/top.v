@@ -17,7 +17,10 @@ module top #(
     output wire bclk,
     output wire lrclk,
     output wire i2s_data,
-    output reg pa_en
+    output reg pa_en,
+    // ---- 蓝牙链路（脚手架预埋，勿改名、勿移位） ----
+    input  wire uart_rx_pin,   // HC-05 TXD -> FPGA，脚 77 (J6-5)
+    output wire uart_tx_pin    // FPGA -> HC-05 RXD，脚 85 (J6-4)
 );
     // 外部复位异步拉低，两级同步释放。test_enable同时经过两级同步。
     // 第3个clk锁定启动模式，第4个clk释放全体子模块复位。
@@ -78,6 +81,21 @@ module top #(
     // 统计保留在内部，便于波形观察；不占额外板卡引脚。
     wire [31:0] overflow_count, underrun_count, clip_count;
 
+    // =====================================================================
+    // 蓝牙链路内部信号（脚手架预埋，名字已冻结，两个分支都不要改这一段）
+    //   bt_rx_data / bt_rx_valid  : uart_rx -> bt_cmd_parse
+    //   bt_evt_*                  : bt_cmd_parse -> 事件多路器
+    //   bt_owner                  : 蓝牙是否接管输入（1=接管，触摸板让位）
+    //   bt_tx_busy                : telemetry 内部发送状态（仅调试用）
+    // =====================================================================
+    wire [7:0] bt_rx_data;
+    wire       bt_rx_valid;
+    wire       bt_evt_valid, bt_evt_ready, bt_evt_on;
+    wire [2:0] bt_evt_key;
+    wire [6:0] bt_evt_note;
+    wire       bt_owner;
+    wire       bt_tx_busy;
+
     // First load aligns I2S. The next two loads terminate two silent stereo
     // frames, but their right LSBs are not sampled until the following rise.
     // Wait until the subsequent left-MSB falling edge before enabling PA.
@@ -134,12 +152,19 @@ module top #(
 
     // 模式启动后固定，运行中的外部开关变化不影响当前事件。
     // 换模式必须统一复位，以同时清除事件队列、声部分配和包络。
-    assign evt_valid = core_rst_n && (test_mode_latched ? test_valid : real_valid);
-    assign evt_key = test_mode_latched ? test_key : real_key;
-    assign evt_note = test_mode_latched ? test_note : real_note;
-    assign evt_on = test_mode_latched ? test_on : real_on;
-    assign real_ready = core_rst_n && !test_mode_latched && evt_ready;
-    assign test_ready = core_rst_n && test_mode_latched && evt_ready;
+    //
+    // 三选一（优先级从高到低）：演示模式 > 蓝牙 > 触摸板
+    //   bt_owner 由 bt_cmd_parse 产生：收到第一条蓝牙命令后拉高，
+    //   直到收到"释放控制"命令才回低。蓝牙接管期间触摸板事件被丢弃，
+    //   避免两边同时按同一个键产生重复触发。
+    assign evt_valid = core_rst_n && (test_mode_latched ? test_valid :
+                                      bt_owner           ? bt_evt_valid : real_valid);
+    assign evt_key   = test_mode_latched ? test_key   : (bt_owner ? bt_evt_key  : real_key);
+    assign evt_note  = test_mode_latched ? test_note  : (bt_owner ? bt_evt_note : real_note);
+    assign evt_on    = test_mode_latched ? test_on    : (bt_owner ? bt_evt_on   : real_on);
+    assign real_ready   = core_rst_n && !test_mode_latched && !bt_owner && evt_ready;
+    assign test_ready   = core_rst_n &&  test_mode_latched &&           evt_ready;
+    assign bt_evt_ready = core_rst_n && !test_mode_latched &&  bt_owner && evt_ready;
 
     // NVOICE合同只支持4或8；B模块的实现与此参数保持一致。
     voice_alloc #(.NVOICE(NVOICE)) u_voice_alloc (
@@ -180,6 +205,37 @@ module top #(
         .clk(clk), .rst_n(core_rst_n), .sample(tx_sample), .sample_valid(mixed_valid),
         .bclk_fall_ce(bclk_fall_ce), .bit_index(bit_index), .frame_load(frame_load),
         .data(i2s_data), .underrun_count(underrun_count)
+    );
+
+    // =====================================================================
+    // 蓝牙链路脚手架（预埋）。以下三个例化的端口连接已冻结，不要改。
+    // 四个实现文件已建好空壳，两个分支各自填充自己那两个：
+    //   feature/bt-in   -> rtl/uart_rx.v  + rtl/bt_cmd_parse.v
+    //   feature/bt-out  -> rtl/uart_tx.v  + rtl/telemetry.v
+    // 空壳当前输出常量（全 0 / 恒高），保证整机可编译、可综合、可上板。
+    // =====================================================================
+    uart_rx #(.CLK_HZ(27000000), .BAUD(115200)) u_uart_rx (
+        .clk(clk), .rst_n(core_rst_n),
+        .rx(uart_rx_pin),
+        .data(bt_rx_data), .valid(bt_rx_valid)
+    );
+
+    bt_cmd_parse u_bt_cmd_parse (
+        .clk(clk), .rst_n(core_rst_n),
+        .data(bt_rx_data), .valid(bt_rx_valid),
+        .evt_valid(bt_evt_valid), .evt_ready(bt_evt_ready),
+        .evt_key_id(bt_evt_key), .evt_note(bt_evt_note), .evt_on(bt_evt_on),
+        .owner(bt_owner)
+    );
+
+    // telemetry 内部自行例化 uart_tx，top 只连引脚。
+    telemetry #(.CLK_HZ(27000000), .BAUD(115200), .NVOICE(NVOICE)) u_telemetry (
+        .clk(clk), .rst_n(core_rst_n),
+        .touch_keys(touch_keys),
+        .voice_note(voice_note), .voice_gate(voice_gate),
+        .timbre(timbre), .bend(bend), .master_gain(master_gain),
+        .clip_count(clip_count),
+        .tx(uart_tx_pin), .tx_busy(bt_tx_busy)
     );
 endmodule
 `default_nettype wire
