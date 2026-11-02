@@ -3,3 +3,7 @@ rtl/audio_timing.v
 rtl/i2s_tx.v
 rtl/test_mode.v
 rtl/ttp229_reader.v
+rtl/uart_rx.v
+rtl/uart_tx.v
+rtl/bt_cmd_parse.v
+rtl/telemetry.v

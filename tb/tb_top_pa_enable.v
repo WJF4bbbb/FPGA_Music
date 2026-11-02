@@ -4,6 +4,8 @@
 module tb_top_pa_enable;
     reg clk=0, rst_n=0, test_enable=1;
     wire ttp_scl,ttp_sdo;
+    wire uart_rx_pin=1'b1;   // 串口空闲高，蓝牙不接管
+    wire uart_tx_pin;
     ttp229_model chip(.rst_n(rst_n),.scl(ttp_scl),.keys(16'd0),.sdo(ttp_sdo));
     wire bclk, lrclk, i2s_data, pa_en;
     top dut (.*);
