@@ -8,6 +8,8 @@ module tb_ttp229_latency;
     reg clk=0,rst_n=0,test_enable=0;
     reg [15:0] touch=0;
     wire ttp_scl,ttp_sdo,bclk,lrclk,i2s_data,pa_en;
+    wire uart_tx_pin;          // 蓝牙遥测输出，本测试台不关心
+    reg  uart_rx_pin = 1'b1;   // 蓝牙接收，拉高=串口空闲（模块未接）
     top #(.TTP_STARTUP_CYCLES(270),.TOUCH_CTRL_FILT(CTRL_FILTER)) dut(.*);
     ttp229_model chip(.rst_n(rst_n),.scl(ttp_scl),.keys(touch),.sdo(ttp_sdo));
     always #18.518518518 clk=~clk;
@@ -40,6 +42,23 @@ module tb_ttp229_latency;
     function automatic integer level_of(input integer n);
         case(n) 0:level_of=dut.voices[0].u_adsr.level;1:level_of=dut.voices[1].u_adsr.level;
                 2:level_of=dut.voices[2].u_adsr.level;default:level_of=dut.voices[3].u_adsr.level;endcase
+    endfunction
+    // 独立波形模型：必须与 rtl/osc.v 的 wave_of() 逐位一致。
+    // timbre 取 0~3：0 正弦 / 1 方波 / 2 锯齿 / 3 三角。
+    function automatic integer wave_of_model(input [1:0] t, input [31:0] ph);
+        reg [15:0] raw;
+        begin
+            case (t)
+                2'd0: wave_of_model = $rtoi(32767.0*$sin(6.283185307179586*ph[31:24]/256.0)
+                                            + (ph[31] ? -0.5 : 0.5));
+                2'd1: wave_of_model = ph[31] ? -32768 : 32767;
+                2'd2: begin raw = {~ph[31], ph[30:16]};                  // 锯齿
+                            wave_of_model = $signed(raw); end
+                2'd3: begin raw = ph[31] ? ~ph[30:15] : ph[30:15];       // 三角
+                            wave_of_model = $signed({~raw[15], raw[14:0]}); end
+                default: wave_of_model = 0;
+            endcase
+        end
     endfunction
     task check(input bit ok,input string message);
         if(ok!==1'b1) begin $display("FAIL latency cycle=%0d: %s",cycle,message);$finish_and_return(1);end
@@ -105,10 +124,7 @@ module tb_ttp229_latency;
             frequency=440.0*(2.0**(($itor(dut.voice_note[oracle_index*7+:7])-69.0)/12.0));
             case(dut.bend) 2:ratio=73562.0/65536.0;-2:ratio=58385.0/65536.0;default:ratio=1.0;endcase
             target_delta[oracle_index]=$rtoi(frequency*4294967296.0/46875.0*ratio);
-            golden_wave[oracle_index]=dut.timbre==0 ?
-                $rtoi(32767.0*$sin(6.283185307179586*old_phase[oracle_index][31:24]/256.0)+
-                      (old_phase[oracle_index][31] ? -0.5 : 0.5)) :
-                (old_phase[oracle_index][31] ? -32768 : 32767);
+            golden_wave[oracle_index]=wave_of_model(dut.timbre,old_phase[oracle_index]);
         end
         #1;
         for(oracle_index=0;oracle_index<4;oracle_index=oracle_index+1) begin
@@ -210,7 +226,7 @@ module tb_ttp229_latency;
             case(phase) 0:offset=0;1:offset=134;2:offset=269;3:offset=575;4:offset=4184;default:offset=81000;endcase
             for(kind=FIRST_CONTROL;kind<5;kind=kind+1) begin
                 case(kind)
-                    0:begin expected_value=dut.timbre==0 ? 1 : 0;begin_measure(16'h010f,offset);end
+                    0:begin expected_value=(dut.timbre+1)&3;begin_measure(16'h010f,offset);end
                     1:begin expected_value=dut.master_gain+4096;begin_measure(16'h020f,offset);end
                     2:begin expected_value=dut.master_gain-4096;begin_measure(16'h040f,offset);end
                     3:begin expected_value=2;begin_measure(16'h080f,offset);end

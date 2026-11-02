@@ -113,13 +113,19 @@ module tb_control_panel;
         check_gain(16'd16384);
         if (timbre !== 2'd0) begin $display("FAIL short timbre pulse accepted"); pass = 0; end
 
-        // ---- timbre toggle (once per press) ----
+        // ---- timbre cycle 0->1->2->3->0 (once per press, 2-bit wrap) ----
         timbre_key = 1; wait_cycles(SETTLE_CYCLES); hold_timbre(2'd1);
         timbre_key = 0; wait_cycles(SETTLE_CYCLES);
         if (timbre !== 2'd1) begin $display("FAIL timbre ->1 = %b", timbre); pass = 0; end
+        timbre_key = 1; wait_cycles(SETTLE_CYCLES); hold_timbre(2'd2);
+        timbre_key = 0; wait_cycles(SETTLE_CYCLES);
+        if (timbre !== 2'd2) begin $display("FAIL timbre ->2 = %b", timbre); pass = 0; end
+        timbre_key = 1; wait_cycles(SETTLE_CYCLES); hold_timbre(2'd3);
+        timbre_key = 0; wait_cycles(SETTLE_CYCLES);
+        if (timbre !== 2'd3) begin $display("FAIL timbre ->3 = %b", timbre); pass = 0; end
         timbre_key = 1; wait_cycles(SETTLE_CYCLES); hold_timbre(2'd0);
         timbre_key = 0; wait_cycles(SETTLE_CYCLES);
-        if (timbre !== 2'd0) begin $display("FAIL timbre ->0 = %b", timbre); pass = 0; end
+        if (timbre !== 2'd0) begin $display("FAIL timbre wrap ->0 = %b", timbre); pass = 0; end
 
         // ---- bend up ----
         bend_up_key = 1; wait_bend_transition(4'sd0);

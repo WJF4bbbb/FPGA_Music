@@ -17,7 +17,7 @@
 | A | i2s_tx.v | pending/frame双缓存、左右同帧、饱和欠载统计 |
 | A | test_mode.v | 经ready/valid发送4个不同音符的测试和弦及释放事件 |
 | B | voice_alloc.v | 键身份跟踪、占用记录、确定性抢占、重触发与Release回收 |
-| B | osc.v | 独立32位DDS、46875Hz音高表、两种音色及连续相位变调 |
+| B | osc.v | 独立32位DDS、46875Hz音高表、四种音色及连续相位变调 |
 | B | adsr.v | trigger缓存、帧控制快照、包络和静音声部valid |
 | B | mixer.v | 全路valid对齐、有符号求和、逐帧增益及饱和处理 |
 | C | sensor_frontend.v | 8路独立同步与滤波，光电初值5400拍 |

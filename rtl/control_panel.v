@@ -1,7 +1,7 @@
 // Owner: C
 // V1.1 ports, V1.2 default filter (docs/interfaces.md §4.2): control panel.
-// 5 keys sync + debounce; timbre toggles once per press; bend is real-time and
-// signed; master_gain steps by 4096 with clamp (no wrap).
+// 5 keys sync + debounce; timbre cycles 0->1->2->3->0 once per press (2-bit wrap);
+// bend is real-time and signed; master_gain steps by 4096 with clamp (no wrap).
 `default_nettype none
 `timescale 1ns/1ps
 module control_panel (
@@ -54,9 +54,10 @@ module control_panel (
                     cnt[k] <= {CW{1'b0}};
             end
 
-            // timbre: toggle once per press (rising edge); long press does not repeat
+            // timbre: 每按一次前进一档，2 位自然回绕 0->1->2->3->0；
+            // 上升沿触发，长按不重复（osc 已支持 4 种波形，此处不再限制在 0/1）
             if (db[4] && !db_timbre_prev)
-                timbre <= (timbre == 2'd0) ? 2'd1 : 2'd0;
+                timbre <= timbre + 2'd1;
 
             // volume: increment/decrement once per press (rising edge), clamp, no wrap
             if (db[1] && !db_vup_prev)
