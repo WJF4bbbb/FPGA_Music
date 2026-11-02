@@ -85,6 +85,19 @@ echo "=================================================="
 echo " 全量回归  （模式：-g$MODES）"
 echo "=================================================="
 
+echo
+echo "---------- RTL 双模式编译（可综合代码，必须两种都过） ----------"
+for mode in 2005 2012; do
+  if iverilog -g$mode -o /dev/null $SRC 2>"sim/rtl.$mode.err"; then
+    ok "-g$mode  整棵 RTL 编译通过"
+  else
+    bad "-g$mode  整棵 RTL 编译失败"
+    sed -n '1,5p' "sim/rtl.$mode.err" | sed 's/^/          /'
+  fi
+done
+echo "  说明：部分 testbench 用了 SystemVerilog 的 task 多语句和尺寸转换，"
+echo "        只能在 -g2012 下编。这是 testbench 的写法，不是 RTL 的问题。"
+
 for mode in $MODES; do
   echo
   echo "---------- -g$mode  模块级 ----------"
