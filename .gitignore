@@ -35,3 +35,19 @@ sim/*.vvp
 
 # Obsolete duplicate source
 gowin/**/src/test_mode.v
+
+# Local diagnostics, reference downloads, editor state and generated results
+/debug/
+/tmp/
+/documents/
+/.vscode/
+/.dideignore
+/docs/superpowers/
+/tb/tb/
+/sim/*
+!/sim/README.md
+*.vvp
+*.vcd
+*.fst
+*.fs
+!/bitstreams/MusicSynth_TangNano20K.fs

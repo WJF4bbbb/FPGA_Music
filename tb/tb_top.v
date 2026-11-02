@@ -4,9 +4,9 @@
 module tb_top;
     parameter NVOICE=4;
     reg clk=0,rst_n=1,test_enable=0;
-    reg [7:0] key_raw=0;
-    reg timbre_key=0,bend_up_key=0,bend_down_key=0,volume_up_key=0,volume_down_key=0;
-    wire bclk,lrclk,i2s_data;
+    wire ttp_scl;
+    wire ttp_sdo=1'b1; // idle peripheral; pin protocol tested by real-system tests
+    wire bclk,lrclk,i2s_data,pa_en;
     reg [15:0] injected_sample=0;
     reg [NVOICE-1:0] injected_gate=0, injected_trigger=0, injected_busy=0, injected_done=0;
     integer lane;
@@ -15,10 +15,8 @@ module tb_top;
     reg pending_valid=0,expected_bit=0,old_fall;
     reg [10:0] held_event;
     top #(.NVOICE(NVOICE)) dut (
-        .clk(clk),.rst_n(rst_n),.key_raw(key_raw),.timbre_key(timbre_key),
-        .bend_up_key(bend_up_key),.bend_down_key(bend_down_key),
-        .volume_up_key(volume_up_key),.volume_down_key(volume_down_key),
-        .test_enable(test_enable),.bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data)
+        .clk(clk),.rst_n(rst_n),.ttp_scl(ttp_scl),.ttp_sdo(ttp_sdo),
+        .test_enable(test_enable),.bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data),.pa_en(pa_en)
     );
     always #18.519 clk=~clk;
     task check;
@@ -55,7 +53,7 @@ module tb_top;
                 if(pending_valid) expected_frame=pending;
                 pending_valid=0;
             end
-            if(dut.mixed_valid) begin pending=dut.mixed_sample;pending_valid=1;end
+            if(dut.mixed_valid) begin pending=pa_en ? dut.mixed_sample : 16'd0;pending_valid=1;end
             if(dut.test_mode_latched) begin
                 check(dut.real_ready===0,"normal source never receives ready in test mode");
                 check({dut.evt_valid,dut.evt_key,dut.evt_note,dut.evt_on}===
@@ -161,6 +159,9 @@ module tb_top;
         // Inject a completed mixer sample; this is wiring stimulus, not synthesis.
         force dut.u_mixer.sample=injected_sample;
         force dut.u_mixer.valid=1'b0;
+        // Startup intentionally mutes completed PCM until PA warmup finishes.
+        // Inject the signed wiring patterns only after this board-level phase.
+        wait(pa_en===1'b1);
         wait_frame;
         @(negedge clk);injected_sample=16'h8001;force dut.u_mixer.valid=1'b1;
         @(negedge clk);force dut.u_mixer.valid=1'b0;
@@ -202,7 +203,7 @@ endmodule
 module sensor_frontend(input wire clk,rst_n,input wire [7:0] key_raw,output wire [7:0] key_state);
     assign key_state=8'd0;
 endmodule
-module control_panel(input wire clk,rst_n,timbre_key,bend_up_key,bend_down_key,volume_up_key,volume_down_key,
+module control_panel #(parameter CTRL_FILT=267000)(input wire clk,rst_n,timbre_key,bend_up_key,bend_down_key,volume_up_key,volume_down_key,
     output wire [1:0] timbre,output wire signed [3:0] bend,output wire [15:0] master_gain);
     assign timbre=0;assign bend=0;assign master_gain=16384;
 endmodule

@@ -4,8 +4,10 @@ rtl/i2s_tx.v
 rtl/test_mode.v
 rtl/voice_alloc.v
 rtl/osc.v
+rtl/sin_rom.v
 rtl/adsr.v
 rtl/mixer.v
 rtl/sensor_frontend.v
 rtl/control_panel.v
 rtl/note_event.v
+rtl/ttp229_reader.v

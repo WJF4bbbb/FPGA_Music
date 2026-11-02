@@ -23,3 +23,13 @@ Windows 使用 OSS CAD Suite 时，先加载安装目录的 `environment.ps1`（
 
 该环境同时将 `bin` 和 `lib` 加入当前会话的 PATH。仅加入 `bin` 可能导致
 `vvp` 使用错误的 DLL，出现访问冲突或仿真结束后进程未正常退出。
+
+## 正式 A+B+C 整机验证
+
+执行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\run_integration.ps1 -UnitTests`。
+新平台是 `tb/tb_top_integration.v`，使用全部真实 RTL，不加载旧 `tb_top.v` 的替身。
+脚本自动设置同套 OSS CAD Suite 的 bin/lib，并记录编译和运行日志。
+当前正式 CTRL_FILT=267000；面板到 I2S 实测 268443 拍（9.942333 ms），低于不变的 270000 拍上限。
+本次按 C 三项、B 五项、真实整机顺序复测，全部通过；整机 3174265 条断言、8847 个双声道帧，INTEGRATION_EXIT=0。
+详细数据、失败退出码验证及范围见 [控制延迟修复报告](../docs/integration/Control_Latency_Fix_Report.md)。
+修改前 10.049 ms/退出 1 的记录保留在 [历史整机报告](../docs/integration/A_B_C_Integration_Test_Report.md)。

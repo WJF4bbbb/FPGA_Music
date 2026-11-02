@@ -53,7 +53,7 @@ class SensorFrontend:
 # control_panel
 # ---------------------------------------------------------------------------
 class ControlPanel:
-    CTRL_FILT = 270000
+    CTRL_FILT = 267000  # RTL default: ~9.889ms; leave room for audio propagation
     VOL_STEP = 4096
     GAIN_RST = 16384
     GAIN_MAX = 65535

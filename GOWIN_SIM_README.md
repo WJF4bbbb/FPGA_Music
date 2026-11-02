@@ -1,3 +1,5 @@
+> 以下是C组历史环境记录，安装路径、许可状态、器件示例及旧整机状态不适用于当前基线。当前器件GW2AR-LV18QN88C8/I7及可移植入口见 [正式交接](docs/INTEGRATION_HANDOFF.md)。
+
 # C 组单元仿真指南（sensor_frontend / control_panel / note_event）
 
 ## 0. 重要前提
@@ -33,7 +35,7 @@ iverilog -g2001 -Wall -s tb_sensor_frontend -o sim/tb_sensor_frontend.vvp ^
 vvp sim/tb_sensor_frontend.vvp
 ```
 把 `sensor_frontend` 换成 `control_panel` / `note_event` 即可。tb 内 `FILT`/`CTRL_FILT` 被覆盖
-成很小的值（4）以便快速跑完，不影响算法；正式滤波拍数为 5400（光电）与约 27 万（控制消抖）。
+成很小的值（4）以便快速跑完，不影响算法；正式滤波拍数为 5400（光电）与 267000（控制消抖，约 9.888889ms @27MHz），控制默认参数的真实音频延迟另由整机测试验证。
 
 预期输出：全部通过打印 `PASS: tb_xxx all checks passed` 并以 `$finish` 结束（vvp 退出码 0）；
 任一项失败打印 `FAIL ...`。每个 tb 还会生成 `sim/tb_xxx.vcd`，可用 GTKWave 打开看波形。
@@ -54,7 +56,7 @@ PASSED`）。它替代不了真实 Verilog 仿真签字，但能在无仿真器�
 
 ## 4. C 组模块交付清单
 - `rtl/sensor_frontend.v`：8 路独立同步+5400 拍滤波；光电 0.2ms，多键同时。
-- `rtl/control_panel.v`：5 键消抖（默认 ~10ms）+ 音色单次切换 + 音量 16384/步 4096/钳位 + 实时 bend(-2/0/+2)。
+- `rtl/control_panel.v`：5 键消抖（默认 267000 拍，约 9.888889ms）+ 音色单次切换 + 音量 16384/步 4096/钳位 + 实时 bend(-2/0/+2)。
 - `rtl/note_event.v`：32 深 FIFO，先松后按再按 key_id 排序，背压保持整条事件，溢出显式计数；
   位级 prev 更新保证 FIFO 满时不永久丢失 note_off（见 docs/test_records.md 2026-10-24）。
 - `tb/tb_*.v`：对应单元自检（正常/边界/背压/复位/溢出），含 VCD dump。

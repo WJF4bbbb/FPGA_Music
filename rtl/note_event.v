@@ -109,8 +109,12 @@ module note_event (
                 end
             end
 
-            if (dropped != 6'd0)
-                overflow_count <= overflow_count + {26'd0, dropped};
+            if (dropped != 6'd0) begin
+                if (overflow_count > 32'hffffffff - {26'd0, dropped})
+                    overflow_count <= 32'hffffffff;
+                else
+                    overflow_count <= overflow_count + {26'd0, dropped};
+            end
 
             head <= h; tail <= t; cnt <= c; prev_key_state <= pv;
         end

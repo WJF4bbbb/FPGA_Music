@@ -1,19 +1,23 @@
 `timescale 1ns/1ps
 `default_nettype none
-// A成员：按V1.1完成顶层接线。B/C功能模块仍待其负责人实现。
-module top #(parameter NVOICE = 4) (
+// Serial electrical boundary is normalized once by ttp229_reader.
+module top #(
+    parameter NVOICE = 4,
+    parameter integer TTP_STARTUP_CYCLES=13500000,
+    parameter integer TTP_SCL_HALF_CYCLES=135,
+    parameter integer TTP_FRAME_GAP_CYCLES=81000,
+    parameter TTP_ACTIVE_LOW=1,
+    parameter integer TOUCH_CTRL_FILT=135000 // 5 ms at 27 MHz
+) (
     input wire clk,
     input wire rst_n,
-    input wire [7:0] key_raw,
-    input wire timbre_key,
-    input wire bend_up_key,
-    input wire bend_down_key,
-    input wire volume_up_key,
-    input wire volume_down_key,
+    input wire ttp_sdo,
+    output wire ttp_scl,
     input wire test_enable,
     output wire bclk,
     output wire lrclk,
-    output wire i2s_data
+    output wire i2s_data,
+    output reg pa_en
 );
     // 外部复位异步拉低，两级同步释放。test_enable同时经过两级同步。
     // 第3个clk锁定启动模式，第4个clk释放全体子模块复位。
@@ -61,8 +65,37 @@ module top #(parameter NVOICE = 4) (
     wire [NVOICE-1:0] voice_valid;
     wire signed [15:0] mixed_sample;
     wire mixed_valid;
+    wire [15:0] touch_keys;
+    wire touch_valid,touch_commit;
+    // Centralized mapping. Bits are TP numbers, not package/panel numbers.
+    // TP0..7: notes; TP8:timbre, TP9/10:volume +/-; TP11/12:bend +/-.
+    // TP13..15 reserved. All consumer inputs are active-high.
+    wire [7:0] normalized_keys = touch_valid ? touch_keys[7:0] : 8'd0;
+    wire [4:0] normalized_panel =
+        touch_valid ? {touch_keys[8],touch_keys[11],touch_keys[12],touch_keys[9],touch_keys[10]} : 5'd0;
+    wire signed [15:0] tx_sample = pa_en ? mixed_sample : 16'sd0;
+    reg [1:0] pa_startup_boundaries;
     // 统计保留在内部，便于波形观察；不占额外板卡引脚。
     wire [31:0] overflow_count, underrun_count, clip_count;
+
+    // First load aligns I2S. The next two loads terminate two silent stereo
+    // frames, but their right LSBs are not sampled until the following rise.
+    // Wait until the subsequent left-MSB falling edge before enabling PA.
+    // External reset disables PA immediately, including between clk edges.
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pa_en <= 1'b0;
+            pa_startup_boundaries <= 2'd0;
+        end else if (!core_rst_n) begin
+            pa_en <= 1'b0;
+            pa_startup_boundaries <= 2'd0;
+        end else if (!pa_en && bclk_fall_ce) begin
+            if (frame_load && pa_startup_boundaries != 2'd3)
+                pa_startup_boundaries <= pa_startup_boundaries + 1'b1;
+            else if (pa_startup_boundaries == 2'd3 && bit_index == 5'd0)
+                pa_en <= 1'b1;
+        end
+    end
 
     // 唯一音频时序源，27MHz直分频；备用clk_gen不例化。
     audio_timing u_audio_timing (
@@ -70,14 +103,21 @@ module top #(parameter NVOICE = 4) (
         .bclk_rise_ce(bclk_rise_ce), .bclk_fall_ce(bclk_fall_ce),
         .bit_index(bit_index), .frame_load(frame_load), .frame_tick(frame_tick)
     );
-    // 原始输入高电平有效。同步/滤波由C模块实现，top不重复处理。
-    sensor_frontend u_sensor_frontend (
-        .clk(clk), .rst_n(core_rst_n), .key_raw(key_raw), .key_state(key_state)
+    ttp229_reader #(
+        .STARTUP_CYCLES(TTP_STARTUP_CYCLES),.SCL_HALF_CYCLES(TTP_SCL_HALF_CYCLES),
+        .FRAME_GAP_CYCLES(TTP_FRAME_GAP_CYCLES),.ACTIVE_LOW(TTP_ACTIVE_LOW)
+    ) u_ttp229_reader (
+        .clk(clk),.rst_n(core_rst_n),.sdo(ttp_sdo),.scl(ttp_scl),
+        .keys_state(touch_keys),.keys_valid(touch_valid),.keys_commit(touch_commit)
     );
-    control_panel u_control_panel (
-        .clk(clk), .rst_n(core_rst_n), .timbre_key(timbre_key),
-        .bend_up_key(bend_up_key), .bend_down_key(bend_down_key),
-        .volume_up_key(volume_up_key), .volume_down_key(volume_down_key),
+    // Existing note stability filter (0.2 ms) is unchanged.
+    sensor_frontend u_sensor_frontend (
+        .clk(clk), .rst_n(core_rst_n), .key_raw(normalized_keys), .key_state(key_state)
+    );
+    control_panel #(.CTRL_FILT(TOUCH_CTRL_FILT)) u_control_panel (
+        .clk(clk), .rst_n(core_rst_n), .timbre_key(normalized_panel[4]),
+        .bend_up_key(normalized_panel[3]), .bend_down_key(normalized_panel[2]),
+        .volume_up_key(normalized_panel[1]), .volume_down_key(normalized_panel[0]),
         .timbre(timbre), .bend(bend), .master_gain(master_gain)
     );
     note_event u_note_event (
@@ -137,7 +177,7 @@ module top #(parameter NVOICE = 4) (
     // V1.1发送器已有pending/frame双缓存，top不重复增加缓冲。
     // 当帧启动下一轮计算时，frame_load仅装载之前已完成的结果。
     i2s_tx u_i2s_tx (
-        .clk(clk), .rst_n(core_rst_n), .sample(mixed_sample), .sample_valid(mixed_valid),
+        .clk(clk), .rst_n(core_rst_n), .sample(tx_sample), .sample_valid(mixed_valid),
         .bclk_fall_ce(bclk_fall_ce), .bit_index(bit_index), .frame_load(frame_load),
         .data(i2s_data), .underrun_count(underrun_count)
     );

@@ -191,6 +191,10 @@ module tb_osc_timbre;
         bend = 4'sd1; clear_stats; run_n(3000);
         check_period(exp_period / 1.059463, "sine C4 bend +1");
 
+        $display("  -- bend -1 semitone --");
+        bend = -4'sd1; clear_stats; run_n(3000);
+        check_period(exp_period / 0.943874, "sine C4 bend -1");
+
         // ---------- 变调过程中相位必须连续（不产生咔声）----------
         $display("  -- switch bend live, phase must stay continuous --");
         bend = 4'sd0; clear_stats; run_n(600);

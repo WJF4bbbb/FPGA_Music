@@ -14,6 +14,7 @@
 //   用这份快照更新包络。这样一帧之内控制线再抖动也不会影响本帧结果。
 //   trigger 可能只持续一个 clk、落在两帧之间 —— 先存进 trig_lat，
 //   到下一个 frame_tick 才并入快照，所以不会丢音。
+`timescale 1ns/1ps
 `default_nettype none
 module adsr #(parameter FS_HZ = 46875) (
     input  wire               clk,

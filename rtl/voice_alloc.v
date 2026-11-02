@@ -14,6 +14,7 @@
 //      都还在响就偷"最早被分配"的那把（用时间戳比较，结果确定）
 //   4. 键被偷走后，那个键的松键事件必须**无害地忽略**，
 //      不能把偷来的椅子又释放掉
+`timescale 1ns/1ps
 `default_nettype none
 module voice_alloc #(parameter NVOICE = 4) (
     input  wire                 clk,

@@ -1,3 +1,17 @@
+# FPGA_Music 当前集成基线
+
+当前入口：[正式集成交接说明](docs/INTEGRATION_HANDOFF.md)。Tang Nano 20K V3923，27MHz，TTP229 16键，四声部DDS/ADSR/Mixer，外置MAX98357A，46.875kHz 16-bit双声道I2S。
+
+**尚未完整硬件验收通过：启动瞬态杂声和触摸边缘误触仍待优化。** 下列旧阶段文档保留历史，不代表当前交接状态。固定正式位流及SHA256见 [bitstreams](bitstreams/README.md)。当前仿真和离线构建入口分别为 run_integration.ps1、run_gowin_implementation.ps1；工具从PATH或显式环境/参数获取。
+
+---
+
+# 当前 integration：TTP229-BSF 16键串行触摸
+
+当前正式RTL已集成真实A/B/C模块及TTP229读取器，使用27MHz、46875Hz、四复音与PA静音预热；触摸映射、实际九个顶层端口、验证与首次板测限制见[集成报告](docs/integration/TTP229_Integration_Report.md)。完整回归入口为 `powershell -NoProfile -ExecutionPolicy Bypass -File ./run_integration.ps1 -UnitTests`。以下保留原阶段记录，旧状态描述不代表当前实现。
+
+---
+
 # FPGA_Music
 
 Tang Nano 20K FPGA音乐合成项目，接口合同见[docs/interfaces.md](docs/interfaces.md)。

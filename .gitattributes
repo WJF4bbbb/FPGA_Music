@@ -3,3 +3,6 @@
 
 # Keep shell scripts executable by Bash after checkout.
 *.sh text eol=lf
+
+# Preserve the verified release bitstream byte-for-byte on every platform.
+/bitstreams/MusicSynth_TangNano20K.fs -text -diff -merge

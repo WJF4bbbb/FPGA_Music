@@ -1,5 +1,6 @@
 // sin_rom.v -- 256 x 16 sine ROM, pure combinational (no initial, no external file)
 // Owner: B   addr 0..255 = one full cycle, dout is signed two's complement
+`timescale 1ns/1ps
 `default_nettype none
 module sin_rom (
     input  wire [7:0]         addr,

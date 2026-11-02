@@ -1,4 +1,22 @@
+# top：TTP229 16键串行集成
+
+2026-10-28 当前integration版本：顶层实际九个物理端口；TTP229-BSF通过GPIO27/SCL、GPIO28/SDO读取16键，TP0～7供音符，TP8～12供控制，TP13～15保留。原五个面板GPIO已按用户要求移除。27MHz、46875Hz、四/八声部合同及PA静音预热不变。
+
+```text
+TTP229 SDO -> ttp229_reader -> 完整16位高有效快照
+                  |                  +-> TP0..7 -> sensor_frontend -> note_event
+                  +-> SCL            +-> TP8..12 -> control_panel (5ms)
+```
+
+正式入口：`powershell -NoProfile -ExecutionPolicy Bypass -File ./run_integration.ps1 -UnitTests`；引脚审计：`tools/check_board_constraints.ps1`；综合：`run_gowin_synthesis.ps1`；独立新目录中的离线实现：`run_gowin_implementation.ps1`。这四类命令均不烧录硬件。Gowin真实源码来自根目录rtl，生效CST为gowin/MusicSynth_TangNano20K/src/MusicSynth_TangNano20K.cst。
+
+以[接口合同](interfaces.md)和[TTP229集成报告](integration/TTP229_Integration_Report.md)为当前依据。V3923引脚/供电已按提供PDF核对，实物16键/多键跳帽、PA51/53连续性和外部时序尚未确认。以下保留早期A组交接历史，其中旧GPIO、11模块计数及B/C未完成状态不代表当前工程。
+
+---
+
 # top：A成员阶段性交付
+
+**2026-10-27 当前版本说明：** 本页主体保留早期 A 组交接历史；正式 top 已增加板级可配置极性适配与 pa_en 启动静音控制，核心 A/B/C 合同不变。当前实现、有效 CST、真实整机回归和物理审计边界见 [板级修改报告](integration/Board_IO_Change_Report.md)，接口见 [interfaces.md](interfaces.md) §3.4。
 
 ## 范围与接口核对
 

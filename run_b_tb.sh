@@ -18,7 +18,16 @@ run() {
         fail=1
         return
     fi
-    vvp "sim/$tb.vvp" || fail=1
+    local logfile="sim/$tb.tmp"
+    if ! vvp "sim/$tb.vvp" 2>&1 | tee "$logfile"; then
+        fail=1
+    fi
+    # Legacy B benches use $finish even when their assertions report FAIL.
+    # Require the real zero-error summary as well as the process exit status.
+    if grep -Eq '(^|[[:space:]])FAIL([[:space:]:]|$)' "$logfile" ||
+       ! grep -Eq '^=== PASS \(0 errors\) ===[[:space:]]*$' "$logfile"; then
+        fail=1
+    fi
 }
 
 run tb_mixer        rtl/mixer.v

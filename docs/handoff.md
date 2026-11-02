@@ -1,3 +1,5 @@
+> 本文为2026-10-21历史交接。当前正式集成基线请先阅读 [INTEGRATION_HANDOFF.md](INTEGRATION_HANDOFF.md)。
+
 # FPGA_Music 开发交接说明（A → B/C）
 
 日期：2026-10-21。适用工程：本Git仓库（`FPGA_Music`）。

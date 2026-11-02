@@ -85,3 +85,26 @@
 
 - 结论：三模块在 Gowin 器件库下可综合、无推断锁存器、无未约束时钟告警；iVerilog 功能 PASS 与 Gowin 综合 PASS 相互印证。注意这是**模块级综合冒烟**，不是整机综合/布局布线/STA；整机综合仍需等 B/C 完成、A 迁移 sources.f 与 top、并补齐真实引脚/时序约束后方可进行。
 - 代码状态：本地未提交；syn_out/ 产物为综合中间文件，建议加入 .gitignore 或提交前排除。
+
+## A+B+C 正式整机联调（2026-10-26）
+
+- 基线 integration/ae57a73；新增真实 `tb_top_integration` 和 `run_integration.ps1`，无替身/force/假 PCM。
+- 12 项单元/边界测试退出 0；真实四复音、输入分配、面板功能、8907 个外部解码 I2S 双声道帧通过。
+- 默认选音延迟 6372 拍（0.236 ms）；默认面板延迟 271323 拍（10.049 ms）**FAIL**，整机脚本正确退出 1。
+- 修复缺少 sin_rom 的源清单、mixer 全帧 valid 合同/数值宽度、overflow_count 与 clip_count 饱和；显式 B 模块 timescale。
+- Gowin 正式 top/27 MHz 综合退出 0；板级 CST/完整时序约束缺失，未声明 P&R/Setup/Hold/上板通过。
+- 本节纠正历史记录中的器件混用：Tang Nano 20K 应为 GW2AR-LV18QN88C8/I7，早期 PG256 器件模块统计不能作为本板整机证据。
+- 详细命令、接口审计、反向验证、实测数据和未完成项目见 [整机报告](integration/A_B_C_Integration_Test_Report.md)。
+
+## 控制路径 10ms 预算修复复测（2026-10-26）
+
+- 根因：原 CTRL_FILT=270000 已占满 10ms，而同步/配置寄存和音频/I2S 流水线仍有开销；原真实测量为 271323 拍（10.049ms）。
+- 正式 RTL 默认值调整为 267000（9.888889ms），测试不覆盖该参数，每次启动断言 DUT 默认值；270000 拍总上限和原功能断言保留。
+- 同套 OSS CAD Suite bin/lib 环境，依次运行 `run_sim_c.bat`、`D:\Git\bin\bash.exe ./run_b_tb.sh g2012`、`run_integration.ps1`。
+- C：sensor_frontend/control_panel/note_event 全 PASS，退出 0。B：mixer/adsr/voice_alloc/osc_timbre/chain 全 PASS，退出 0。
+- 整机 A/B/C/D/E/F-key/F-control 全 PASS；3174265 条断言、8847 个外部 I2S 双声道帧；功能 PASS、performance_failures=0、INTEGRATION_EXIT=0。
+- 控制实测：`267003 + 839 + 601 = 268443` 拍，即 **9.942333ms**，余量 **1557** 拍（0.057667ms）。选音仍为 6372 拍（0.236ms）。
+- 另修复 B 脚本忽略 `$finish=0` 的 FAIL 文本问题；同一隔离错误副本原退出 0，修复后退出 1，正式 B RTL/断言未改。整机默认值不匹配的负向测试也实际退出 1。
+- Python 参考模型默认值同步，参考检查全部通过、退出 0；tools/ref_c.py 第 252 行无行尾空白。
+- 未重跑新默认值的 Gowin/P&R/STA/板测。未执行 commit/push/merge/reset。
+- 详见 [本次修复报告](integration/Control_Latency_Fix_Report.md) 和 [最新延迟图](integration/images/latency_breakdown.svg)；上节旧 FAIL 数据为历史记录。

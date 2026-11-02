@@ -1,5 +1,5 @@
 // Owner: C
-// V1.1 (docs/interfaces.md §4.2): control panel.
+// V1.1 ports, V1.2 default filter (docs/interfaces.md §4.2): control panel.
 // 5 keys sync + debounce; timbre toggles once per press; bend is real-time and
 // signed; master_gain steps by 4096 with clamp (no wrap).
 `default_nettype none
@@ -16,7 +16,7 @@ module control_panel (
     output reg  signed [3:0] bend,
     output reg  [15:0] master_gain
 );
-    parameter CTRL_FILT = 270000;          // ~10ms @27MHz; re-evaluate for mechanical keys
+    parameter CTRL_FILT = 267000;          // ~9.889ms @27MHz; reserve audio latency within 10ms
     localparam CW = 19;                    // holds (CTRL_FILT-1); raise if CTRL_FILT > 524288
     localparam VOL_STEP = 16'd4096;
     localparam GAIN_RST = 16'd16384;       // ~25%

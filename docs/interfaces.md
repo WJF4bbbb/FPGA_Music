@@ -1,12 +1,12 @@
 # FPGA_Music 模块接口规范
 
-版本：V1.1　日期：2026-10-21　维护人：A
+版本：V1.3　日期：2026-10-28　维护人：integration（TTP229-BSF 16键串行边界）
 
 **这份文件就是三个人写代码时共同遵守的“接线合同”。先按端口写代码，再由 top.v 接起来。**
 
 建议放在工程 `FPGA_Music/docs/模块接口规范.md`。本版以已核对的《团队分工与开发计划(2).md》和本聊天的 audio_timing 详细时序约定为基础，统一名称并补齐未定接口。若旧计划、旧骨架与本文件冲突，后续开发以本文件为准。
 
-本次修订的是规范，未修改你电脑或 GitHub 的工程。本版已按最新截图统一命名；原V1.0中的旧命名不再作为后续依据。旧骨架需要按第9节迁移；端口统一并不代表功能已经通过仿真、综合或板测。
+V1.3 将外部八路音符 GPIO 和五个面板 GPIO 替换成 TTP229-BSF 两线串行输入，顶层实际为九个物理端口。八音符与五项控制映射集中在 top；其他音频合同保持不变。当前根目录 sources.f 共13个RTL（含 sin_rom 和新读取器），并非下文早期分工所称的11个。实现、验证与物理限制见 [TTP229集成报告](integration/TTP229_Integration_Report.md)。
 
 ## 1. 先看全局：谁负责哪一段
 
@@ -24,7 +24,7 @@
 | C | control_panel.v | 读取音色、变调和音量控制键 |
 | C | note_event.v | 把按下/松开变成带身份的音符指令 |
 
-**最终采用：截图的新命名 + 27MHz直接分频方案。当前参与运行的RTL共11个；截图中的第12个文件clk_gen.v保留为备用PLL封装，当前不例化、不加入仿真/综合源列表。**
+**当前采用27MHz直接分频，sources.f列13个活动RTL（含sin_rom与ttp229_reader）；clk_gen不例化、不加入正式仿真/综合源列表。**
 
 sensor_frontend.v取代旧名key_scan.v，control_panel.v取代旧名timbre_sel.v；文件名与module名一起改，职责和本规范规定的端口保持一致。
 
@@ -163,21 +163,24 @@ enable=0时不发指令。enable=1时背压必须保持整条指令不变，直�
 
 ### 3.4 top.v：总装及外部接口
 
-参数：NVOICE=4；目前只支持4或8。
+参数：NVOICE=4，支持4或8；TTP_STARTUP_CYCLES=13500000，TTP_SCL_HALF_CYCLES=135，TTP_FRAME_GAP_CYCLES=81000，TTP_ACTIVE_LOW=1，TOUCH_CTRL_FILT=135000。默认均按27MHz计算。非默认协议定时需要重新核对实际时钟和手册，不能直接用于板测。
 
 | 方向 | 端口 | 位宽 | 含义 |
 |---|---|---|---|
-| 输入 | clk | 1 | 板载27MHz |
-| 输入 | rst_n | 1 | 外部低有效复位 |
-| 输入 | key_raw | 8 | 8路原始选音传感器信号 |
-| 输入 | timbre_key | 1 | 音色切换键 |
-| 输入 | bend_up_key、bend_down_key | 各1 | 升/降调键 |
-| 输入 | volume_up_key、volume_down_key | 各1 | 音量键 |
-| 输入 | test_enable | 1 | 启动时选择正常/测试模式 |
-| 输出 | bclk、lrclk | 各1 | 音频时钟 |
-| 输出 | i2s_data | 1 | I2S串行数据 |
+| 输入 | clk | 1 | 板载27MHz，FPGA4 |
+| 输入 | rst_n | 1 | 外部低有效复位，FPGA73 |
+| 输入 | ttp_sdo | 1 | BSF CMOS串行数据，FPGA28 |
+| 输出 | ttp_scl | 1 | BSF专用串行时钟，FPGA27 |
+| 输入 | test_enable | 1 | 启动时高选演示、低选正常，FPGA74 |
+| 输出 | bclk、lrclk | 各1 | I2S时钟，FPGA56、55 |
+| 输出 | i2s_data | 1 | I2S数据，FPGA54 |
+| 输出 | pa_en | 1 | FPGA51；低关闭、高开启；V3923音频页标53，与主页矛盾，待实物通断核验 |
 
-顶层外部键/传感器统一约定高电平为按下或触发；实际硬件相反时，由A在明确位置反相，不能两个人各反一次。
+外部不再有 key_raw、timbre_key、bend_up_key、bend_down_key、volume_up_key、volume_down_key；旧 KEY_ACTIVE_LOW/PANEL_ACTIVE_LOW 参数已经移除。读取器将串行原始低有效电平转换成高有效位图，消费者不得再次反相。TP0～TP7接原八音符；TP8音色、TP9/10音量增减、TP11/12弯音升降，TP13～TP15保留。实物须通过模块电阻/跳帽设为16键、全多键；FPGA收16位不会改变芯片配置。
+
+读取器 keys_state[15:0] 在完整16位帧结束时原子更新；keys_valid在首次完整帧后保持1，keys_commit为每帧提交时的一拍脉冲。valid不表示有CRC/ACK校验或检测到模块在线。上电/复位后先等待0.5秒，再开始轮询。SCL空闲高，100kHz，每半周期5us；低相位末端读取两级同步后的SDO。帧间空闲3ms用于外围超时重新对齐。手册未给出完整最坏传播时间，仿真采用200ns外设延迟，实物仍需核对采样窗口。
+
+功放启动期间仍持续提供 I2S 时钟和有效样本，发送器输入暂用零替代混音 PCM。完成两个完整静音双声道帧并采样其右声道 LSB 后，top 在下一左声道 MSB 的 BCLK 下降沿锁存 pa_en=1；之后透传正常 PCM。外部复位异步将 pa_en 清零并重启静音预热。该变化不修改 mixer/i2s_tx 等核心模块接口、27MHz/46875Hz 时序或运行中延迟合同。
 
 基础版不做演奏中热切换测试模式：test_enable在外部复位期间设置，并保持到启动完成。A先在clk域同步test_enable，启动时锁定模式，模式锁定前保持其他模块复位；运行中忽略模式变化。换模式按复位重新启动，避免残留音符、旧队列和半帧切换。同步与锁定是top职责，不交给test_mode猜测。
 
@@ -205,7 +208,7 @@ enable=0时不发指令。enable=1时背压必须保持整条指令不变，直�
 | 方向 | 端口 | 位宽 | 来源 / 去向 |
 |---|---|---|---|
 | 输入 | clk、rst_n | 各1 | 公共信号 |
-| 输入 | key_raw | 8 | top.key_raw |
+| 输入 | key_raw | 8 | top内部归一化后的touch_keys[7:0]，不是物理GPIO |
 | 输出 | key_state | 8 | note_event.key_state；1表示触发 |
 
 每路独立同步和滤波；不能按下一个键就屏蔽其他键。光电输入初始滤波值5400拍，即0.2ms；机械替身应单独评估，不把0.2ms当通用机械消抖保证。
@@ -229,6 +232,10 @@ enable=0时不发指令。enable=1时背压必须保持整条指令不变，直�
 初版timbre只用0和1，按一下切换一次，长按不反复切。bend约定：只按升调键为+2，只按降调键为−2，都不按或同时按为0。必须声明signed，否则负值会被误读。
 
 master_gain范围0～65535，0静音、65535接近单位增益。复位为16384（约25%）；音量加/减每次约4096，边界钳位，不能回绕。输入键由本模块同步和消抖，输出为clk域内稳定配置值。
+
+control_panel模块独立默认参数仍为267000拍，用于保留历史单元合同；当前正式top通过TOUCH_CTRL_FILT明确例化为 **135000拍，即5.000ms**。这是TTP229数字位图之后的稳定滤波，不是把触摸芯片的内部扫描时间纳入FPGA预算。配置一般在位图提交后135003拍生效。真实整机和延迟回归使用top的这个正式值；只有输入逻辑单元测试缩短参数以穷举。
+
+串行最差轮询必须包含已经锁定旧数据的剩余读帧、3ms间隔和下一完整帧：`2*31*135+81000+8=89378`拍。控制到I2S的保守数字界为 `89378+135003+3*576+128+36=226273`拍，约8.380481ms，低于270000拍（10ms）。该界假设数字输入保持稳定到完成采集/滤波；持续噪声、任意短于轮询间隔的脉冲、断线及模块配置错误不具备相同保证。实测值与独立数学参考、外部I2S解码结果见集成报告。
 
 ### 4.3 note_event.v：键状态变指令
 
@@ -352,9 +359,9 @@ master_gain的标度固定为gain/65536：65535是接近1，不是精确1。乘�
 
 | 发送端 | 接收端 |
 |---|---|
-| top.key_raw | sensor_frontend.key_raw |
+| ttp229_reader.keys_state[7:0]（首次有效后） | sensor_frontend.key_raw |
 | sensor_frontend.key_state | note_event.key_state |
-| top的5个面板键 | control_panel对应的5个同名输入 |
+| top集中映射TP8/11/12/9/10（首次有效后） | control_panel的音色/上弯/下弯/增音量/减音量输入 |
 | control_panel.timbre | 所有osc.timbre |
 | control_panel.bend | 所有osc.bend |
 | control_panel.master_gain | mixer.master_gain |
@@ -444,7 +451,7 @@ voice_samples整根总线只是位容器，不当作一个大有符号数参与�
 
 ### 9.1 当前sources.f固定清单
 
-下面是当前11个活动RTL文件，路径相对于FPGA_Music根目录；同一清单用于核对Gowin源列表。tb文件只在对应仿真命令中添加。
+下面是当前13个活动RTL文件，路径相对于FPGA_Music根目录；同一清单用于核对Gowin源列表。tb文件只在对应仿真命令中添加。
 
 ```text
 rtl/top.v
@@ -453,11 +460,13 @@ rtl/i2s_tx.v
 rtl/test_mode.v
 rtl/voice_alloc.v
 rtl/osc.v
+rtl/sin_rom.v
 rtl/adsr.v
 rtl/mixer.v
 rtl/sensor_frontend.v
 rtl/control_panel.v
 rtl/note_event.v
+rtl/ttp229_reader.v
 ```
 
 当前不加入rtl/clk_gen.v、旧key_scan.v或旧timbre_sel.v。若旧文件尚未移走，避免用rtl/*.v把旧版本和备用PLL文件全部自动加入。
@@ -471,6 +480,12 @@ C的测试文件对应改名为tb_sensor_frontend.v、tb_control_panel.v；A的�
 - 区分11个活动模块与1个备用clk_gen；补充精确源文件清单。
 - audio_timing、i2s_tx及B组模块的端口、I2S位边界和ready/valid合同保持V1.0定义，避免为改文件名重写算法。
 
+### 9.3 V1.2控制延迟修订
+
+- 只将 control_panel 的 CTRL_FILT 正式默认值改为 267000，保留 270000 拍整机总延迟上限。
+- 所有信号名称、位宽、复位、27MHz 时钟、46875Hz 音频及成员 A/B 时序和算法保持不变。
+- 单元测试可继续用 CTRL=4 加速功能回归；真实整机另检查正式默认参数和真实 PCM/I2S 传播。
+
 ## 10. 发给AI写模块时，附上这段话
 
-请依据《模块接口规范》V1.1编写指定模块。严格保持本文的模块名、端口名、方向、位宽、符号、时钟域和握手语义。只能改变内部实现，不得自行增加第二套分频、改变实际采样率，或把事件valid当成无握手的一拍脉冲。编写audio_timing和i2s_tx时，特别核对索引15/16/31/0及frame_load的旧值/新值关系；编写ADSR和mixer时，按规定锁存控制并逐级传递valid。若发现规格矛盾，先指出。请提供完整代码、自检testbench及真实验证状态；没有实际运行的测试不能声称通过。
+请依据《模块接口规范》V1.2编写指定模块。严格保持本文的模块名、端口名、方向、位宽、符号、时钟域和握手语义。只能改变内部实现，不得自行增加第二套分频、改变实际采样率，或把事件valid当成无握手的一拍脉冲。编写audio_timing和i2s_tx时，特别核对索引15/16/31/0及frame_load的旧值/新值关系；编写ADSR和mixer时，按规定锁存控制并逐级传递valid。若发现规格矛盾，先指出。请提供完整代码、自检testbench及真实验证状态；没有实际运行的测试不能声称通过。

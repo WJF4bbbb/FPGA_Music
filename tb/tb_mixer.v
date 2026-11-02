@@ -58,6 +58,10 @@ module tb_mixer;
         begin
             @(posedge clk); #1;
             vv = 4'b0000;                 // 单拍脉冲
+            if (valid !== 1'b1) begin
+                $display("  FAIL  %0s : complete frame must assert valid", name);
+                errors = errors + 1;
+            end
             if (sample !== exp) begin
                 $display("  FAIL  %0s : got %0d, expect %0d", name, sample, exp);
                 errors = errors + 1;
@@ -93,13 +97,13 @@ module tb_mixer;
         $display("  after reset: sample=%0d valid=%b", sample, valid);
 
         // --- 定标：单路 10000，>>2 之后是 2500 ---
-        apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b0001, 16'd65535);
+        apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b1111, 16'd65535);
         expect_s(16'sd2499, "1 lane 10000, gain=65535 (2500*65535>>16)");
 
-        apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b0001, 16'd32768);
+        apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b1111, 16'd32768);
         expect_s(16'sd1250, "1 lane 10000, gain=32768 (half)");
 
-        apply(16'sd30000, 16'sd0, 16'sd0, 16'sd0, 4'b0001, 16'd0);
+        apply(16'sd30000, 16'sd0, 16'sd0, 16'sd0, 4'b1111, 16'd0);
         expect_s(16'sd0, "gain=0 -> silence");
 
         // --- 4 路满幅：有余量，所以不该削顶，更不该回绕 ---
@@ -115,9 +119,12 @@ module tb_mixer;
         apply(16'sd32767, -16'sd32768, 16'sd0, 16'sd0, 4'b1111, 16'd65535);
         expect_s(-16'sd1, "+32767 and -32768 -> -1");
 
-        // --- 无效声部不参与累加 ---
+        // V1.1: silent lanes still submit valid samples; all lanes form one frame.
+        apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b1111, 16'd65535);
+        expect_s(16'sd2499, "only lane0 audible, all lanes valid");
+        // A partial valid mask must never produce a partial/misaligned PCM frame.
         apply(16'sd10000, 16'sd10000, 16'sd10000, 16'sd10000, 4'b0001, 16'd65535);
-        expect_s(16'sd2499, "only lane0 valid");
+        expect_v(1'b0, "partial frame rejected");
 
         // --- 全无效：valid 应拉低，sample 保持上一帧 ---
         apply(16'sd10000, 16'sd0, 16'sd0, 16'sd0, 4'b0000, 16'd65535);
@@ -138,6 +145,7 @@ module tb_mixer;
         end
 
         $display("=== %0s (%0d errors) ===", (errors == 0) ? "PASS" : "FAIL", errors);
+        if (errors != 0) $finish_and_return(1);
         $finish;
     end
 

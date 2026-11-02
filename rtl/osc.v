@@ -11,6 +11,7 @@
 //   音色 timbre  -> 换对照表（正弦/方波/锯齿/三角），不影响相位
 //   变调 bend    -> 改变每步走多远（乘一个半音比例），**绝不清相位**
 //                   （清相位会在变调瞬间产生台阶，听感上是"咔"一声）
+`timescale 1ns/1ps
 `default_nettype none
 module osc #(parameter FS_HZ = 46875) (
     input  wire               clk,
