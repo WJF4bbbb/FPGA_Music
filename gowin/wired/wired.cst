@@ -1,0 +1,40 @@
+//Copyright (C)2014-2026 Gowin Semiconductor Corporation.
+//All rights reserved.
+//File Title: Physical Constraints file
+//Tool Version: V1.9.12.04 (64-bit)
+//Part Number: GW2AR-LV18QN88C8/I7
+//Device: GW2AR-18
+//Device Version: C
+//
+//【有线版】UART 走板载 BL616 USB 桥（Type-C 直连），不走 HC-05。
+//   FPGA pin 69 = UART TX（FPGA 发 -> 主机）
+//   FPGA pin 70 = UART RX（主机发 -> FPGA）
+// 与主版本（77/85 接 HC-05）唯一区别就是这两根脚，其余完全一致。
+
+IO_LOC "pa_en" 51;
+IO_PORT "pa_en" IO_TYPE=LVCMOS33 PULL_MODE=DOWN DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "i2s_data" 54;
+IO_PORT "i2s_data" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "lrclk" 55;
+IO_PORT "lrclk" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "bclk" 56;
+IO_PORT "bclk" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "test_enable" 74;
+IO_PORT "test_enable" IO_TYPE=LVCMOS33 PULL_MODE=DOWN BANK_VCCIO=3.3;
+IO_LOC "rst_n" 73;
+IO_PORT "rst_n" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "clk" 4;
+IO_PORT "clk" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// TTP229-BSF: 3.3V CMOS SDO, idle high.
+IO_LOC "ttp_scl" 27;
+IO_PORT "ttp_scl" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "ttp_sdo" 28;
+IO_PORT "ttp_sdo" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// 有线链路（板载 BL616 USB-UART）。TX=69，RX=70。
+// RX 上拉：主机未连接时保持空闲高，不会误判起始位。
+IO_LOC "uart_tx_pin" 69;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "uart_rx_pin" 70;
+IO_PORT "uart_rx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;

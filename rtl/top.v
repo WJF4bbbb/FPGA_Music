@@ -7,7 +7,10 @@ module top #(
     parameter integer TTP_SCL_HALF_CYCLES=135,
     parameter integer TTP_FRAME_GAP_CYCLES=81000,
     parameter TTP_ACTIVE_LOW=1,
-    parameter integer TOUCH_CTRL_FILT=135000 // 5 ms at 27 MHz
+    parameter integer TOUCH_CTRL_FILT=135000, // 5 ms at 27 MHz
+    // 演示模式开关。默认 0 = 关闭，键盘优先。
+    //   若置 1，开机时 test_enable 为高则锁定演示模式（播放 C4/E4/G4/C5 循环和弦）。
+    parameter DEMO_ENABLE=0
 ) (
     input wire clk,
     input wire rst_n,
@@ -22,6 +25,16 @@ module top #(
     input  wire uart_rx_pin,   // HC-05 TXD -> FPGA，脚 77 (J6-5)
     output wire uart_tx_pin    // FPGA -> HC-05 RXD，脚 85 (J6-4)
 );
+    // 演示模式（test_mode）在本板会被误触发，必须默认关掉：
+    //   test_enable 接在脚 74，该脚与配置 Flash 的 MSPI 引脚共用（构建开了
+    //   -use_mspi_as_gpio），上电后被拉高 → test_mode_latched=1 →
+    //   test_mode 用 C4/E4/G4/C5 循环和弦**完整顶替**触摸板。
+    //   实际现象：恒音高一直响（每 2.25 s 重放一次和弦）、按音符键毫无反应、
+    //   但音量键/弯音键仍然有效（它们走 control_panel 独立通路）。
+    //   因此这里把演示使能钉死为 0（DEMO_ENABLE=0），触摸板恢复最高实际优先级。
+    //   脚 74 的引脚约束保留不动，避免出现未约束 I/O。
+    wire demo_enable_eff = DEMO_ENABLE ? test_enable : 1'b0;
+
     // 外部复位异步拉低，两级同步释放。test_enable同时经过两级同步。
     // 第3个clk锁定启动模式，第4个clk释放全体子模块复位。
     reg [1:0] reset_sync;
@@ -38,7 +51,7 @@ module top #(
             core_rst_n <= 1'b0;
         end else begin
             reset_sync <= {reset_sync[0],1'b1};
-            mode_sync <= {mode_sync[0],test_enable};
+            mode_sync <= {mode_sync[0],demo_enable_eff};
             if(reset_sync[1] && !mode_locked) begin
                 test_mode_latched <= mode_sync[1];
                 mode_locked <= 1'b1;
@@ -138,8 +151,57 @@ module top #(
         .volume_up_key(normalized_panel[1]), .volume_down_key(normalized_panel[0]),
         .timbre(timbre), .bend(bend), .master_gain(master_gain)
     );
+    // ------------------------------------------------------------------
+    // 死锁看门狗（全音关断）
+    //   若某个音符事件连续约 0.6 s 都送不到 voice_alloc，说明事件链已经卡死
+    //   （声部全被门控、队列头上那个 note_on 永远等不到空闲声部）。
+    //   此时强制复位事件链三个模块：门控全部清零 -> 立刻静音；
+    //   队列清空、owner 清零 -> 触摸板和蓝牙都能重新正常接管。
+    // ------------------------------------------------------------------
+    reg [23:0] stall_cnt;
+    reg [2:0]  panic_cnt;
+    reg        panic;
+    wire       evt_stall = evt_valid && !evt_ready;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            stall_cnt <= 24'd0;
+            panic     <= 1'b0;
+            panic_cnt <= 3'd0;
+        end else if (panic) begin
+            panic_cnt <= panic_cnt + 3'd1;
+            if (panic_cnt == 3'd7) panic <= 1'b0;
+        end else if (evt_stall) begin
+            if (stall_cnt == 24'hFFFFFF) begin
+                stall_cnt <= 24'd0;
+                panic     <= 1'b1;
+            end else begin
+                stall_cnt <= stall_cnt + 24'd1;
+            end
+        end else begin
+            stall_cnt <= 24'd0;
+        end
+    end
+    // 蓝牙交还控制权（bt_owner 1->0）时，把事件链整体复位 8 拍：
+    // 网页若漏发 note_off（触摸被系统取消、标签页被切走等），声部的 gate
+    // 会一直挂在那里，喇叭就变成"恒音高一直响"。这里在交还的那一拍强制
+    // 把所有 gate 清零，等于每次把控制权还给触摸板时顺便"全音关断"。
+    reg [2:0] rel_hold;
+    reg       bt_owner_d;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            bt_owner_d <= 1'b0;
+            rel_hold   <= 3'd0;
+        end else begin
+            bt_owner_d <= bt_owner;
+            if (bt_owner_d && !bt_owner) rel_hold <= 3'd7;
+            else if (rel_hold != 3'd0)   rel_hold <= rel_hold - 3'd1;
+        end
+    end
+
+    wire logic_rst_n = core_rst_n && !panic && (rel_hold == 3'd0);
+
     note_event u_note_event (
-        .clk(clk), .rst_n(core_rst_n), .key_state(key_state),
+        .clk(clk), .rst_n(logic_rst_n), .key_state(key_state),
         .evt_ready(real_ready), .evt_valid(real_valid),
         .evt_key_id(real_key), .evt_note(real_note), .evt_on(real_on),
         .overflow_count(overflow_count)
@@ -166,9 +228,10 @@ module top #(
     assign test_ready   = core_rst_n &&  test_mode_latched &&           evt_ready;
     assign bt_evt_ready = core_rst_n && !test_mode_latched &&  bt_owner && evt_ready;
 
+
     // NVOICE合同只支持4或8；B模块的实现与此参数保持一致。
     voice_alloc #(.NVOICE(NVOICE)) u_voice_alloc (
-        .clk(clk), .rst_n(core_rst_n), .evt_valid(evt_valid), .evt_ready(evt_ready),
+        .clk(clk), .rst_n(logic_rst_n), .evt_valid(evt_valid), .evt_ready(evt_ready),
         .evt_key_id(evt_key), .evt_note(evt_note), .evt_on(evt_on),
         .voice_busy(voice_busy), .env_done(env_done), .voice_note(voice_note),
         .voice_gate(voice_gate), .voice_trigger(voice_trigger)
@@ -221,7 +284,7 @@ module top #(
     );
 
     bt_cmd_parse u_bt_cmd_parse (
-        .clk(clk), .rst_n(core_rst_n),
+        .clk(clk), .rst_n(logic_rst_n),
         .data(bt_rx_data), .valid(bt_rx_valid),
         .evt_valid(bt_evt_valid), .evt_ready(bt_evt_ready),
         .evt_key_id(bt_evt_key), .evt_note(bt_evt_note), .evt_on(bt_evt_on),

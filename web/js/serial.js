@@ -158,7 +158,9 @@
       updateButtons();
     } catch (e) {
       port = null;
-      setStatus('连接失败', 'err');
+      var msg = (e && e.message) ? e.message : String(e);
+      setStatus('连接失败: ' + msg, 'err');
+      if (window.console) console.error('[serial] connect failed:', e);
       throw e;
     }
   }

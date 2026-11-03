@@ -63,6 +63,11 @@ module bt_cmd_parse (
     reg [3:0]  pidx;
     reg [7:0]  crc;
 
+    // owner 看门狗：接管后 OWNER_TIMEOUT 个时钟内没有收到任何字节，就交还触摸板。
+    // 54_000_000 = 2 s @ 27 MHz。防止网页/手机中途断开导致触摸板被永久锁死。
+    localparam [26:0] OWNER_TIMEOUT = 27'd54000000;
+    reg [26:0] idle_cnt;
+
     // CRC8（多项式 0x07，不反转，不异或输出），单步：吃一个字节
     function [7:0] crc8_step;
         input [7:0] d;
@@ -90,6 +95,7 @@ module bt_cmd_parse (
             evt_note   <= 7'd0;
             evt_on     <= 1'b0;
             owner      <= 1'b0;
+            idle_cnt   <= 27'd0;
         end else begin
             // ---- 握手撤销：只有 evt_ready 为高才撤，保证 voice_alloc 收到 ----
             if (evt_valid && evt_ready)
@@ -154,6 +160,21 @@ module bt_cmd_parse (
 
                     default: state <= S_H0;
                 endcase
+            end
+
+            // ---- owner 看门狗（放最后，优先级最高）----
+            if (valid) begin
+                idle_cnt <= 27'd0;
+            end else if (owner) begin
+                if (idle_cnt == OWNER_TIMEOUT) begin
+                    owner     <= 1'b0;      // 交还触摸板
+                    evt_valid <= 1'b0;      // 丢掉卡住的事件
+                    idle_cnt  <= 27'd0;
+                end else begin
+                    idle_cnt <= idle_cnt + 27'd1;
+                end
+            end else begin
+                idle_cnt <= 27'd0;
             end
         end
     end

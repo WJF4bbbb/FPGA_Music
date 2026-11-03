@@ -1,0 +1,28 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2AR-18C" pn="GW2AR-LV18QN88C8/I7">gw2ar18c-000</Device>
+    <FileList>
+        <File path="../../rtl/adsr.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/audio_timing.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/control_panel.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/i2s_tx.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/mixer.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/note_event.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/osc.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/sensor_frontend.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/sin_rom.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/test_mode.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/top.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ttp229_reader.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/voice_alloc.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/uart_rx.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/uart_tx.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/bt_cmd_parse.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/telemetry.v" type="file.verilog" enable="1"/>
+        <File path="wired.cst" type="file.cst" enable="1"/>
+        <File path="../../constraints/top.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>

@@ -111,6 +111,7 @@
     paint(k, true);
     record(k, true);
     judge(k);
+    if (handBackTimer) { clearTimeout(handBackTimer); handBackTimer = null; }
   }
 
   function release(k) {
@@ -119,10 +120,32 @@
     sendNote(noteOf(k), false, k);
     paint(k, false);
     record(k, false);
+    armHandBack();
   }
 
   function releaseAll() {
     for (var k = 0; k < 8; k++) release(k);
+    armHandBack();
+  }
+
+  // ---- 自动交还触摸板 ----
+  // 板子那边只要收到过一条蓝牙音符，就会把触摸板锁在外面（bt_owner=1）。
+  // 以前只有手动点"交还触摸板"才解锁，忘点就整台琴哑掉。
+  // 这里改成：最后一个音符松开后 1.5 s 没有新输入，自动发一次 type=03。
+  var handBackTimer = null;
+  function handBack() {
+    if (window.Serial && typeof window.Serial.sendRelease === 'function') {
+      window.Serial.sendRelease();
+    }
+  }
+  function armHandBack() {
+    if (handBackTimer) clearTimeout(handBackTimer);
+    handBackTimer = setTimeout(function () {
+      handBackTimer = null;
+      var any = false;
+      for (var i = 0; i < 8; i++) if (S.pressed[i]) any = true;
+      if (!any) handBack();
+    }, 1500);
   }
 
   function paint(k, on) {
@@ -646,6 +669,10 @@
         b.addEventListener('mouseleave', function () { release(k); });
         b.addEventListener('touchstart', function (e) { e.preventDefault(); press(k); }, { passive: false });
         b.addEventListener('touchend', function (e) { e.preventDefault(); release(k); }, { passive: false });
+        // 触摸被系统取消（滚动/手势/来电）时 touchend 不会来，必须补这两个，
+        // 否则这一路 note_on 永远等不到 note_off，声部被永久门控。
+        b.addEventListener('touchcancel', function () { release(k); }, { passive: true });
+        b.addEventListener('pointercancel', function () { release(k); }, { passive: true });
 
         kk.addEventListener('click', function (e) {
           e.stopPropagation();

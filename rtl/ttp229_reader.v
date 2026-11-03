@@ -34,9 +34,16 @@ module ttp229_reader #(
     localparam [1:0] STARTUP=2'd0,GAP=2'd1,LOW_PHASE=2'd2,HIGH_PHASE=2'd3;
     reg [1:0] state;
     reg [TIMER_W-1:0] timer;
+    // 抗误报补丁（全 1 过滤 + 3 帧去抖）在诊断期间临时移除，直接观察原始 frame_now。
+    wire [15:0] frame_now = {pressed, shift_keys[14:0]};
     reg [3:0] bit_index;
     reg [15:0] shift_keys;
     (* syn_preserve=1, syn_keep=1, async_reg="true" *) reg sdo_meta,sdo_sync;
+    // 板载 TTP229-BSF：SDO 空闲高、按下低（与约束注释 "idle high" 一致）。
+    // 关键坑：Tang Nano 20K 板载 LED 是"低电平点亮"，之前用 LED 观察触摸位时把
+    // "按下=亮/灭"的方向看反了，误把数据极性判反，改成了 pressed=sdo_sync，
+    // 结果上电时 8 个音符键全被当成"按住"（恒音高），按键反而变"松开"（无声）。
+    // 恢复为 GitHub 原始：ACTIVE_LOW=1 时 pressed = ~sdo_sync，按下=1。
     wire pressed = ACTIVE_LOW ? ~sdo_sync : sdo_sync;
 
     always @(posedge clk or negedge rst_n) begin
@@ -79,7 +86,7 @@ module ttp229_reader #(
                         shift_keys[bit_index]<=pressed;
                         scl<=ACTIVE_LOW ? 1'b1 : 1'b0;
                         if(bit_index==15) begin
-                            keys_state<={pressed,shift_keys[14:0]};
+                            keys_state<=frame_now;   // 诊断：每帧直接更新原始值
                             keys_valid<=1'b1;
                             keys_commit<=1'b1;
                             state<=GAP;
