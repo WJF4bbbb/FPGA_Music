@@ -48,8 +48,18 @@
     var f = 440 * Math.pow(2, (m - 69) / 12);
     return f >= 1000 ? (f / 1000).toFixed(2) + ' kHz' : f.toFixed(1) + ' Hz';
   }
-  function scaleIndex(m) {
-    for (var i = 0; i < SCALE.length; i++) if (SCALE[i] === m) return i;
+  // 网页移调会整体改写 MIDI 音号（input.js 的 noteOf = BASE_NOTES + semitone，
+  // 值存在 localStorage 的 btin.semitone）。瀑布的行标签和匹配都得跟着平移，
+  // 否则一移调，所有音都对不上 SCALE，瀑布直接空掉。
+  var STORE_SEMI = 'btin.semitone';
+  function readSemitone() {
+    try {
+      var v = parseInt(localStorage.getItem(STORE_SEMI), 10);
+      return isNaN(v) ? 0 : Math.max(-12, Math.min(12, v));
+    } catch (e) { return 0; }
+  }
+  function scaleIndex(m, semi) {
+    for (var i = 0; i < SCALE.length; i++) if (SCALE[i] + semi === m) return i;
     return -1;
   }
 
@@ -224,6 +234,7 @@
     ctx.clearRect(0, 0, cssW, cssH);
 
     var rows = SCALE.length;
+    var semi = readSemitone();
     var pad = 3;
     var rowH = (cssH - pad * 2) / rows;
     var labelW = 30;
@@ -238,7 +249,7 @@
       ctx.fillStyle = (r % 2) ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.05)';
       ctx.fillRect(labelW, y, plotW, rowH - 1);
       ctx.fillStyle = '#8b93a1';
-      ctx.fillText(noteName(SCALE[r]), 4, y + rowH / 2);
+      ctx.fillText(noteName(SCALE[r] + semi), 4, y + rowH / 2);
     }
 
     // 历史柱：越靠右越新
@@ -249,7 +260,7 @@
       var x = labelW + (off + i) * slot;
       for (var v = 0; v < 4; v++) {
         if (!((hh.gates >> v) & 1)) continue;
-        var idx = scaleIndex(hh.notes[v]);
+        var idx = scaleIndex(hh.notes[v], semi);
         if (idx < 0) continue;
         ctx.fillStyle = '#4a9eff';
         ctx.fillRect(x, pad + idx * rowH + 1, Math.max(slot, 1), rowH - 3);
