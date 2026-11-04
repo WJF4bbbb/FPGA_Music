@@ -41,6 +41,14 @@ module osc #(parameter FS_HZ = 46875) (
 
     // note -> FCW,  FCW = round( f * 2^32 / FS_HZ ),  f = 440 * 2^((note-69)/12)
     //
+    // 【音域】48..84 = C3..C6，共三个八度。网页的移调是 ±12 半音，
+    //   虚拟键盘 60..72 移调后正好落在 48..84，全范围都能出声。
+    //
+    //   ⚠️ 这里以前只写了 60..72，default 回落到 C4。后果是"移调后锁死"：
+    //     往下移调 C4 变 59 -> 不在表里 -> 还是 C4（听起来没降）
+    //     往上移调 C5 变 73 -> 不在表里 -> 掉回 C4（高音反而更低）
+    //   现在超出 48..84 一律夹到端点，绝不回落到某个固定音。
+    //
     // 这里刻意写成 function，而不是独立的 always @* 组合块。原因：
     // Icarus 12.0 在 -g2012 下，若某个输入在声明处初始化后不再变化，
     // always @* 不会在时刻 0 触发，fcw 会一直停在 x —— 而且**不报错**，
@@ -48,22 +56,52 @@ module osc #(parameter FS_HZ = 46875) (
     // 行为一致，同样可综合，没有这个坑。
     function [31:0] note_to_fcw;
         input [6:0] n;
+        reg [6:0] nn;
         begin
-            case (n)
-                7'd60: note_to_fcw = 32'd23971696;   // 261.63 Hz  C4
-                7'd61: note_to_fcw = 32'd25397127;   // 277.18 Hz
-                7'd62: note_to_fcw = 32'd26907319;   // 293.66 Hz
-                7'd63: note_to_fcw = 32'd28507311;   // 311.13 Hz
-                7'd64: note_to_fcw = 32'd30202444;   // 329.63 Hz  E4
-                7'd65: note_to_fcw = 32'd31998375;   // 349.23 Hz
-                7'd66: note_to_fcw = 32'd33901097;   // 369.99 Hz
-                7'd67: note_to_fcw = 32'd35916962;   // 392.00 Hz  G4
-                7'd68: note_to_fcw = 32'd38052695;   // 415.30 Hz
-                7'd69: note_to_fcw = 32'd40315426;   // 440.00 Hz  A4
-                7'd70: note_to_fcw = 32'd42712706;   // 466.16 Hz
-                7'd71: note_to_fcw = 32'd45252536;   // 493.88 Hz
-                7'd72: note_to_fcw = 32'd47943392;   // 523.25 Hz  C5
-                default: note_to_fcw = 32'd23971696;
+            // 先夹到音域内，保证 case 一定命中，不会静默走 default
+            if      (n < 7'd48) nn = 7'd48;
+            else if (n > 7'd84) nn = 7'd84;
+            else                nn = n;
+
+            case (nn)
+                7'd48: note_to_fcw = 32'd11985848;   // C3   130.81 Hz
+                7'd49: note_to_fcw = 32'd12698564;   // C#3  138.59 Hz
+                7'd50: note_to_fcw = 32'd13453659;   // D3   146.83 Hz
+                7'd51: note_to_fcw = 32'd14253656;   // D#3  155.56 Hz
+                7'd52: note_to_fcw = 32'd15101222;   // E3   164.81 Hz
+                7'd53: note_to_fcw = 32'd15999188;   // F3   174.61 Hz
+                7'd54: note_to_fcw = 32'd16950549;   // F#3  185.00 Hz
+                7'd55: note_to_fcw = 32'd17958481;   // G3   196.00 Hz
+                7'd56: note_to_fcw = 32'd19026348;   // G#3  207.65 Hz
+                7'd57: note_to_fcw = 32'd20157713;   // A3   220.00 Hz
+                7'd58: note_to_fcw = 32'd21356353;   // A#3  233.08 Hz
+                7'd59: note_to_fcw = 32'd22626268;   // B3   246.94 Hz
+                7'd60: note_to_fcw = 32'd23971696;   // C4   261.63 Hz
+                7'd61: note_to_fcw = 32'd25397127;   // C#4  277.18 Hz
+                7'd62: note_to_fcw = 32'd26907319;   // D4   293.66 Hz
+                7'd63: note_to_fcw = 32'd28507311;   // D#4  311.13 Hz
+                7'd64: note_to_fcw = 32'd30202444;   // E4   329.63 Hz
+                7'd65: note_to_fcw = 32'd31998375;   // F4   349.23 Hz
+                7'd66: note_to_fcw = 32'd33901097;   // F#4  369.99 Hz
+                7'd67: note_to_fcw = 32'd35916962;   // G4   392.00 Hz
+                7'd68: note_to_fcw = 32'd38052695;   // G#4  415.30 Hz
+                7'd69: note_to_fcw = 32'd40315426;   // A4   440.00 Hz
+                7'd70: note_to_fcw = 32'd42712706;   // A#4  466.16 Hz
+                7'd71: note_to_fcw = 32'd45252536;   // B4   493.88 Hz
+                7'd72: note_to_fcw = 32'd47943392;   // C5   523.25 Hz
+                7'd73: note_to_fcw = 32'd50794254;   // C#5  554.37 Hz
+                7'd74: note_to_fcw = 32'd53814638;   // D5   587.33 Hz
+                7'd75: note_to_fcw = 32'd57014623;   // D#5  622.25 Hz
+                7'd76: note_to_fcw = 32'd60404889;   // E5   659.26 Hz
+                7'd77: note_to_fcw = 32'd63996750;   // F5   698.46 Hz
+                7'd78: note_to_fcw = 32'd67802195;   // F#5  739.99 Hz
+                7'd79: note_to_fcw = 32'd71833923;   // G5   783.99 Hz
+                7'd80: note_to_fcw = 32'd76105391;   // G#5  830.61 Hz
+                7'd81: note_to_fcw = 32'd80630853;   // A5   880.00 Hz
+                7'd82: note_to_fcw = 32'd85425413;   // A#5  932.33 Hz
+                7'd83: note_to_fcw = 32'd90505072;   // B5   987.77 Hz
+                7'd84: note_to_fcw = 32'd95886784;   // C6  1046.50 Hz
+                default: note_to_fcw = 32'd23971696; // 不可达：nn 已被夹到 48..84
             endcase
         end
     endfunction

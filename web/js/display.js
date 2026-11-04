@@ -268,10 +268,13 @@
     }
 
     // ③ 声部
+    // 注意：voice_note 在板子里是"上一次分配的音号"，松键时只清 gate、不清音号，
+    // 复位默认值还是 60(C4)。所以空闲声部不能直接显示它，否则四路都会挂着 C4。
+    // 判据只用 gates：没在发声就显示 —，和频率/状态两行保持一致。
     for (var v = 0; v < 4; v++) {
       var on = (s.gates >> v) & 1;
       if (els['vc' + v])    els['vc' + v].classList.toggle('on', !!on);
-      if (els['vnote' + v]) els['vnote' + v].textContent = noteName(s.notes[v]);
+      if (els['vnote' + v]) els['vnote' + v].textContent = on ? noteName(s.notes[v]) : '—';
       if (els['vjp' + v])   els['vjp' + v].textContent = on ? jianpu(s.notes[v]) : '';
       if (els['vfreq' + v]) els['vfreq' + v].textContent = on ? freqStr(s.notes[v]) : '—';
       if (els['vst' + v])   els['vst' + v].textContent = on ? '发声' : '空闲';

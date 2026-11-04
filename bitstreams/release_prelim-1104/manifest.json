@@ -3,17 +3,17 @@
   "Branch": "release/prelim-1104",
   "SourceCommit": "8fa24ff620d117002b41e75eb38b1a8cd0126aa9",
   "SourceCommitNote": "8fa24ff = 关闭演示模式（DEMO_ENABLE=0）+ 死锁看门狗 + owner 看门狗。本地在其上追加了 9178c9b（仅文档）。",
-  "GeneratedAt": "2026-11-04T11:07:26+08:00",
+  "GeneratedAt": "2026-11-04T12:06:00+08:00",
   "Files": {
     "MusicSynth_TangNano20K.fs": {
       "Role": "main firmware (wireless): 4 voices, 4 timbres, BT telemetry out + BT virtual input in, UART on pin 85/77 to HC-05",
-      "SHA256": "4EF036784478AA5354773B72829832380CB13591E7D6CE80F301057EF27DF9AF",
+      "SHA256": "3D1951545C9E4361E415F08E9C641362BF81D81FFEF978DE4BF038AF5CA587CC",
       "Bytes": 7264153,
       "ProgramMode": "-r 9 exFlash Erase,Program,Verify"
     },
     "MusicSynth_Wired.fs": {
       "Role": "wired firmware: identical logic, UART moved to pin 69/70 (onboard BL616 USB bridge) for a plain Type-C cable, no HC-05 needed",
-      "SHA256": "268E66C50B2268C4519D80339F2E19DF8588229D980BBC07CC6F61AAA8FB3995",
+      "SHA256": "5968AD7A2E0A587FB537761B0D92CBEDB3C6CC4379CF4541F0ED12C04E96CA24",
       "Bytes": 7264153,
       "ProgramMode": "-r 9 exFlash Erase,Program,Verify",
       "Pins": "uart_tx=69 uart_rx=70"
@@ -41,19 +41,19 @@
   ],
   "DemoMode": "disabled (DEMO_ENABLE=0); pin 74 test_enable is now unused logic and cannot override the touch panel",
   "Resources": {
-    "Logic": "4992/20736 (25%)",
+    "Logic": "5377/20736 (26%)",
     "Register": "1626/15750 (11%)",
-    "CLS": "3000/10368 (29%)",
+    "CLS": "3176/10368 (31%)",
     "BSRAM": "4/46",
     "DSP": "6.5/24"
   },
   "Timing": {
-    "Fmax_MHz": 30.424,
+    "Fmax_MHz": 30.983,
     "Constraint_MHz": 27.0,
     "TNS_Setup": 0.0,
     "TNS_Hold": 0.0,
-    "WorstSetupSlack_ns": 4.169,
-    "WorstPath": "core_rst_n -> u_note_event/fifo_key RAM enable"
+    "WorstSetupSlack_ns": 4.762,
+    "WorstPath": "u_note_event/cnt -> fifo_key RAM 写口"
   },
   "Warnings": [
     "NL0002 sin_rom swept x4 (implemented in BSRAM, not removed)",
@@ -62,11 +62,13 @@
   ],
   "Verification": {
     "RTLCompile": "PASS in both -g2005 and -g2012",
-    "ModuleAndChainTB": "all PASS (incl. tb_ttp229_latency, tb_chain, tb_bt_chain)",
+    "OscRange": "fcw 48..84 逐音核对，与公式 round(440*2^((n-69)/12)*2^32/46875) 完全一致；30/100/0 夹到 C3/C6/C3",
+    "OscTimbre": "tb_osc_timbre PASS",
+    "ModuleAndChainTB": "all PASS (incl. tb_ttp229_latency, tb_chain)",
     "StaleTopLevelTB": [
-      "tb_top, tb_top_board_inputs, tb_top_pa_enable still assert the pre-fix contract 'test_enable=1 -> test_mode_latched=1'. With DEMO_ENABLE=0 that contract is intentionally gone, so these 3 report FAIL. RTL is correct; the assertions are obsolete."
+      "tb_top, tb_top_board_inputs, tb_top_pa_enable 仍断言修复前的 'test_enable=1 -> 演示模式'，与 DEMO_ENABLE=0 冲突，属断言过时"
     ],
-    "G2005TBCompileFailures": "6 top-level TBs use SystemVerilog task syntax and only compile under -g2012 (pre-existing, not a regression)"
+    "G2005TBCompileFailures": "6 个顶层 TB 用了 SystemVerilog task 写法，只能在 -g2012 下编（历史遗留）"
   },
   "SourceHashConvention": "SHA256 after CRLF-to-LF normalization; paths are repository-relative.",
   "SourceHashesNormalizedLF": {
@@ -79,7 +81,7 @@
     "rtl/i2s_tx.v": "F2F161CA9D142161F89D72CCBB78B7C807581CDBBC7476CFFFB063D4EE7049AE",
     "rtl/mixer.v": "2B7F1909E0E01E24F3E095B35E6D28131CFF0317585E82E079BEA219EE120FF1",
     "rtl/note_event.v": "9D39468DDB8B985FE0C2BE3708CDC18352C6DB858F33EEE159ECB413385C5B5F",
-    "rtl/osc.v": "FA3C083DB61B2EEC1A4C58C9DF9CFB3337A3C006F556BC59D5FEF78066E2DB08",
+    "rtl/osc.v": "83C8364C049ECBD71C83470842072C47C8B6EDE1CA5EF01163B31346A3780E6B",
     "rtl/sensor_frontend.v": "2160C4F8EC1E768E3CB6548DAD87B98158654B2CB6E430FCD11348551A92F577",
     "rtl/sin_rom.v": "519D00447EA2F5FE29721ECCA3D8E1D5881293CC8D5DB9CE5BA83DFBDDCF4639",
     "rtl/telemetry.v": "30300365F07F52471374C86FDFFE9210DCBD600BBE950B192A92E16FB32DECF5",
@@ -89,5 +91,6 @@
     "rtl/uart_rx.v": "5D2FCB1AA437381D56C2A5E2EC12EA1F11BFCBCC9C66705D379564B132731DFB",
     "rtl/uart_tx.v": "17AFFBD8BA0428730A6E956AFF30A962D0F569543806143F15AF2AF385BA6C24",
     "rtl/voice_alloc.v": "C6A52231E8A235B364C258AEA46668308606B1A8B06550BF3DB154641F216D16"
-  }
+  },
+  "NoteRange": "48..84 (C3..C6); 超出范围夹到端点，不再回落到 C4"
 }
