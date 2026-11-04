@@ -1,14 +1,22 @@
 {
   "Release": "prelim-1104",
   "Branch": "release/prelim-1104",
-  "SourceCommit": "56d37825f0e0f4568a30bc5982e6f68cca28c1e4",
-  "GeneratedAt": "2026-11-02T21:00:35+08:00",
+  "SourceCommit": "8fa24ff620d117002b41e75eb38b1a8cd0126aa9",
+  "SourceCommitNote": "8fa24ff = 关闭演示模式（DEMO_ENABLE=0）+ 死锁看门狗 + owner 看门狗。本地在其上追加了 9178c9b（仅文档）。",
+  "GeneratedAt": "2026-11-04T11:07:26+08:00",
   "Files": {
     "MusicSynth_TangNano20K.fs": {
-      "Role": "main firmware: 4 voices, 4 timbres, BT telemetry out + BT virtual input in",
-      "SHA256": "E8B0CBB6524012532B7C8B1C9796CCD12C13CBC7CCD848160F57A5572288A843",
+      "Role": "main firmware (wireless): 4 voices, 4 timbres, BT telemetry out + BT virtual input in, UART on pin 85/77 to HC-05",
+      "SHA256": "4EF036784478AA5354773B72829832380CB13591E7D6CE80F301057EF27DF9AF",
       "Bytes": 7264153,
       "ProgramMode": "-r 9 exFlash Erase,Program,Verify"
+    },
+    "MusicSynth_Wired.fs": {
+      "Role": "wired firmware: identical logic, UART moved to pin 69/70 (onboard BL616 USB bridge) for a plain Type-C cable, no HC-05 needed",
+      "SHA256": "268E66C50B2268C4519D80339F2E19DF8588229D980BBC07CC6F61AAA8FB3995",
+      "Bytes": 7264153,
+      "ProgramMode": "-r 9 exFlash Erase,Program,Verify",
+      "Pins": "uart_tx=69 uart_rx=70"
     },
     "at_cfg.fs": {
       "Role": "one-shot tool: drives HC-05 from 9600 to 115200 via AT commands",
@@ -31,32 +39,42 @@
     "saw",
     "triangle"
   ],
+  "DemoMode": "disabled (DEMO_ENABLE=0); pin 74 test_enable is now unused logic and cannot override the touch panel",
   "Resources": {
-    "Logic": "4804/20736 (24%)",
-    "Register": "1635/15750 (11%)",
-    "CLS": "2882/10368 (28%)",
+    "Logic": "4992/20736 (25%)",
+    "Register": "1626/15750 (11%)",
+    "CLS": "3000/10368 (29%)",
     "BSRAM": "4/46",
     "DSP": "6.5/24"
   },
   "Timing": {
-    "Fmax_MHz": 29.08,
+    "Fmax_MHz": 30.424,
     "Constraint_MHz": 27.0,
     "TNS_Setup": 0.0,
     "TNS_Hold": 0.0,
-    "WorstSetupSlack_ns": 2.649
+    "WorstSetupSlack_ns": 4.169,
+    "WorstPath": "core_rst_n -> u_note_event/fifo_key RAM enable"
   },
   "Warnings": [
     "NL0002 sin_rom swept x4 (implemented in BSRAM, not removed)",
+    "CV0016 input test_enable is unused (expected: DEMO_ENABLE=0 folds it to constant 0; pin 74 stays constrained with PULL_MODE=DOWN so no unconstrained I/O)",
     "PR1014 clk_d uses generic routing (harmless at 27 MHz)"
   ],
-  "Verification": "26 testbenches PASS / 0 FAIL (bash tools/run_all_tb.sh)",
+  "Verification": {
+    "RTLCompile": "PASS in both -g2005 and -g2012",
+    "ModuleAndChainTB": "all PASS (incl. tb_ttp229_latency, tb_chain, tb_bt_chain)",
+    "StaleTopLevelTB": [
+      "tb_top, tb_top_board_inputs, tb_top_pa_enable still assert the pre-fix contract 'test_enable=1 -> test_mode_latched=1'. With DEMO_ENABLE=0 that contract is intentionally gone, so these 3 report FAIL. RTL is correct; the assertions are obsolete."
+    ],
+    "G2005TBCompileFailures": "6 top-level TBs use SystemVerilog task syntax and only compile under -g2012 (pre-existing, not a regression)"
+  },
   "SourceHashConvention": "SHA256 after CRLF-to-LF normalization; paths are repository-relative.",
   "SourceHashesNormalizedLF": {
     "constraints/top.sdc": "894C2A0D74F33A3565ABC80BABA410AB5DC741ABD73C159E02007F7909E3BE41",
     "gowin/MusicSynth_TangNano20K/src/MusicSynth_TangNano20K.cst": "A0B178AFAC6EF688F0B70E269E84D950D985D40FB80EC5B527571A24AE0D123C",
     "rtl/adsr.v": "36B0B6A6413BC39DC7EA72C0D89E97C1EEBAFAEF58D26D7057FC5E5DA6C8D20F",
     "rtl/audio_timing.v": "771FCFEE63E6A3DCBF6C4CFC6FB7BE73B0902CC7CC053B9C70BCEF0DEA6AAD25",
-    "rtl/bt_cmd_parse.v": "8D64DA0E51C1AE758F6D17CEF6AAFAA6DDD52956F36C1203F6FD26266470A0B1",
+    "rtl/bt_cmd_parse.v": "F391FB93835A3840B2C1BD1E1A41E086BF0A7213DF78B768406436EC020113BD",
     "rtl/control_panel.v": "515A1462050BAD82A470215FA31891347502995EC953438DDF42B1E0E651E23E",
     "rtl/i2s_tx.v": "F2F161CA9D142161F89D72CCBB78B7C807581CDBBC7476CFFFB063D4EE7049AE",
     "rtl/mixer.v": "2B7F1909E0E01E24F3E095B35E6D28131CFF0317585E82E079BEA219EE120FF1",
@@ -66,8 +84,8 @@
     "rtl/sin_rom.v": "519D00447EA2F5FE29721ECCA3D8E1D5881293CC8D5DB9CE5BA83DFBDDCF4639",
     "rtl/telemetry.v": "30300365F07F52471374C86FDFFE9210DCBD600BBE950B192A92E16FB32DECF5",
     "rtl/test_mode.v": "C2CD8C6D292CF26C1F3B828F769ECDB1E7D4DAEF9F509523F7B5BA654F35B678",
-    "rtl/top.v": "177C217C13206C7B95D6675132D870257DFC00A707C2F3D33F7B514C1963FD69",
-    "rtl/ttp229_reader.v": "A89343EEE7C876D06ACED1559738C4B2BDB7792FCE02CF704D523C563C9493D0",
+    "rtl/top.v": "9DB1D72BCD112E8B030A619E48BE8FA9F0447F844471F87F7CC64F4F0D0BE5A4",
+    "rtl/ttp229_reader.v": "95CE2FD4BF562F240754D2D5DCC857DAA4B5E3BB2D1C7526304DB9F4D0C2E797",
     "rtl/uart_rx.v": "5D2FCB1AA437381D56C2A5E2EC12EA1F11BFCBCC9C66705D379564B132731DFB",
     "rtl/uart_tx.v": "17AFFBD8BA0428730A6E956AFF30A962D0F569543806143F15AF2AF385BA6C24",
     "rtl/voice_alloc.v": "C6A52231E8A235B364C258AEA46668308606B1A8B06550BF3DB154641F216D16"
