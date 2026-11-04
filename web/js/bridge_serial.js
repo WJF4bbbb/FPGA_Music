@@ -17,6 +17,7 @@
   var frameCount = 0;
   var lastFrameAt = 0;
   var watchdog = null;
+  var keepalive = null;
 
   function crc8(bytes) {
     var c = 0;
@@ -53,6 +54,7 @@
       setStatus('已连接', 'on');
       updateButtons();
       startWatchdog();
+      startKeepalive();
     };
 
     es.onmessage = function (e) {
@@ -69,6 +71,7 @@
       setStatus('桥接断开，正在重试…', 'err');
       connected = false;
       updateButtons();
+      stopKeepalive();
     };
   }
 
@@ -76,6 +79,7 @@
     if (es) { es.close(); es = null; }
     connected = false;
     stopWatchdog();
+    stopKeepalive();
     setStatus('未连接');
     updateButtons();
   }
@@ -94,6 +98,26 @@
 
   function stopWatchdog() {
     if (watchdog) { clearInterval(watchdog); watchdog = null; }
+  }
+
+  // ---- 保活心跳 ----
+  // 板子的 bt_cmd_parse 有一条保护：蓝牙接管后连续 2 秒收不到任何字节，就判定
+  // "网页那边断了"，把控制权还给触摸板；而 top.v 在交还的那一拍会把所有正在响
+  // 的音清零。两条凑一起，结果就是「按住一个音超过 2 秒会被掐断」。
+  // 这里每秒补一帧 type=0x00、长度 0 的合法帧：CRC 能过，但解析器不认识这个类型，
+  // 直接忽略，只起到"我还活着"的作用，顺便把那个 2 秒计时器重置。
+  // 旧固件（没有这条保护）同样会忽略它，所以对两种板子都安全。
+  var KEEPALIVE_MS = 1000;
+
+  function startKeepalive() {
+    stopKeepalive();
+    keepalive = setInterval(function () {
+      if (connected) post(0x00, []);
+    }, KEEPALIVE_MS);
+  }
+
+  function stopKeepalive() {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
   }
 
   function post(type, payload) {
@@ -123,6 +147,17 @@
   window.addEventListener('DOMContentLoaded', function () {
     var b1 = document.getElementById('btnConnect');
     var b2 = document.getElementById('btnRelease');
+
+    // 最常见的错：直接双击 bridge.html，地址栏是 file:///C:/...
+    // 这种页面里的 /events 会解析成 file:///events，永远连不上桥接服务。
+    // 这里直接拦下来，把正确地址写在状态栏上，别再让人猜。
+    if (location.protocol === 'file:') {
+      setStatus('打开方式不对：先双击 web/桥接.bat，再访问 http://localhost:8765/web/bridge.html', 'err');
+      if (b1) { b1.textContent = '请改用 localhost:8765 打开'; b1.disabled = true; }
+      if (b2) b2.disabled = true;
+      return;
+    }
+
     if (b1) b1.addEventListener('click', function () {
       if (connected) disconnect(); else connect();
     });

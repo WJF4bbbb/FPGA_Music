@@ -31,6 +31,7 @@
   var TYPE_STATUS   = 0x01;   // 板子 -> 网页，长度 15
   var TYPE_NOTE     = 0x02;   // 网页 -> 板子，长度 2
   var TYPE_RELEASE  = 0x03;   // 网页 -> 板子，长度 0
+  var TYPE_KEEPALIVE= 0x00;   // 网页 -> 板子，长度 0，解析器会忽略，只用来重置 2 s 超时
 
   // ---- 内部状态 ----
   var port   = null;
@@ -38,6 +39,7 @@
   var writer = null;
   var reading = false;
   var handlers = [];
+  var keepalive = null;
 
   // ---- CRC8：多项式 0x07，初值 0x00，不反转 ----
   function crc8(bytes) {
@@ -156,6 +158,7 @@
       setStatus('已连接', 'on');
       readLoop();
       updateButtons();
+      startKeepalive();
     } catch (e) {
       port = null;
       var msg = (e && e.message) ? e.message : String(e);
@@ -167,6 +170,7 @@
 
   async function disconnect() {
     reading = false;
+    stopKeepalive();
     try { if (reader) await reader.cancel(); } catch (e) {}
     try { if (writer) { writer.releaseLock(); } } catch (e) {}
     writer = null;
@@ -207,6 +211,24 @@
   // 交还触摸板控制权（bt_owner 回低）
   function sendRelease() {
     return sendFrame(TYPE_RELEASE, []);
+  }
+
+  // ---- 保活心跳 ----
+  // 板子的 bt_cmd_parse 有一条保护：蓝牙接管后连续 2 秒收不到任何字节，就判定
+  // "网页那边断了"，把控制权还给触摸板；而 top.v 在交还的那一拍会把所有正在响
+  // 的音清零。两条凑一起，结果就是「按住一个音超过 2 秒会被掐断」。
+  // 这里每秒补一帧 type=0x00、长度 0 的合法帧：CRC 能过，但解析器不认识这个类型，
+  // 直接忽略，只起到"我还活着"的作用，顺便把那个 2 秒计时器重置。
+  // 旧固件（没有这条保护）同样会忽略它，所以对两种板子都安全。
+  function startKeepalive() {
+    stopKeepalive();
+    keepalive = setInterval(function () {
+      if (writer) sendFrame(TYPE_KEEPALIVE, []);
+    }, 1000);
+  }
+
+  function stopKeepalive() {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
   }
 
   function onFrame(fn) {
