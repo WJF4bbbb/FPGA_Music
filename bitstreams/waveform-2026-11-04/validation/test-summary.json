@@ -1,0 +1,51 @@
+{
+  "RTLWaveformCases": 11,
+  "NodeTests": 11,
+  "PythonTests": 10,
+  "HostTestsSkipped": 0,
+  "PhysicalUARTSimulation": {
+    "samplesCompared": 1024,
+    "wavePackets": 10,
+    "statusPackets": 10,
+    "interleavedStatus": 6
+  },
+  "HistoricalAudioEquivalence": {
+    "clocks": 1200000,
+    "PCMSamples": 2084,
+    "nonzeroSamples": 2073,
+    "voices": 4,
+    "timbres": 4,
+    "differences": 0
+  },
+  "GowinMappedRAMSimulation": {
+    "wordsCompared": 1024,
+    "differences": 0,
+    "model": "GW2A prim_sim.v SDPB"
+  },
+  "ExistingIntegration": {
+    "stereoFramesChecked": 22503,
+    "assertions": 5537759,
+    "functional": "PASS",
+    "note": "Original full run initially had two stale demo-mode bench failures; both benches were fixed to explicitly enable demo and passed focused reruns."
+  },
+  "Browser": {
+    "transport": "Mock Web Serial carrying RTL UART bytes, not a physical device",
+    "checks": [
+      "complete real-sample plotting",
+      "status coexistence",
+      "freeze/resume",
+      "scale",
+      "stale",
+      "disconnect clears",
+      "390px viewport",
+      "bridge page"
+    ],
+    "pageExceptions": 0
+  },
+  "IndependentReviews": {
+    "specification": "PASS",
+    "codeQuality": "PASS"
+  },
+  "PhysicalBoardProgrammed": false,
+  "PhysicalBluetoothTested": false
+}

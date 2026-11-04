@@ -12,6 +12,8 @@
   'use strict';
 
   var handlers = [];
+  var waveHandlers = [];
+  var connectionHandlers = [];
   var es = null;
   var connected = false;
   var frameCount = 0;
@@ -47,9 +49,14 @@
   function connect() {
     if (es) return;
     setStatus('桥接中…', '');
-    es = new EventSource('/events');
+    var stream = new EventSource('/events');
+    es = stream;
 
     es.onopen = function () {
+      if (es !== stream) return;
+      lastFrameAt = 0;
+      frameCount = 0;
+      connectionState(true);
       connected = true;
       setStatus('已连接', 'on');
       updateButtons();
@@ -58,6 +65,7 @@
     };
 
     es.onmessage = function (e) {
+      if (es !== stream || !connected) return;
       frameCount++;
       lastFrameAt = Date.now();
       var s;
@@ -67,7 +75,18 @@
       }
     };
 
+    es.addEventListener('wave', function (e) {
+      if (es !== stream || !connected) return;
+      var capture;
+      try { capture = JSON.parse(e.data); } catch (err) { return; }
+      if (!WaveProtocol.isCapture(capture)) return;
+      waveHandlers.forEach(function (fn) { try { fn(capture); } catch (err) { console.error(err); } });
+    });
+
     es.onerror = function () {
+      if (es !== stream) return;
+      lastFrameAt = 0;
+      connectionState(false);
       setStatus('桥接断开，正在重试…', 'err');
       connected = false;
       updateButtons();
@@ -78,6 +97,9 @@
   function disconnect() {
     if (es) { es.close(); es = null; }
     connected = false;
+    lastFrameAt = 0;
+    frameCount = 0;
+    connectionState(false);
     stopWatchdog();
     stopKeepalive();
     setStatus('未连接');
@@ -140,6 +162,10 @@
     return post(0x03, []);
   }
 
+  function connectionState(value) {
+    connectionHandlers.forEach(function (fn) { try { fn(value); } catch (err) { console.error(err); } });
+  }
+
   function onFrame(fn) {
     if (typeof fn === 'function') handlers.push(fn);
   }
@@ -173,6 +199,8 @@
     sendNote: sendNote,
     sendRelease: sendRelease,
     onFrame: onFrame,
+    onWave: function (fn) { if (typeof fn === 'function') waveHandlers.push(fn); },
+    onConnection: function (fn) { if (typeof fn === 'function') connectionHandlers.push(fn); },
     setStatus: setStatus,
     crc8: crc8
   };

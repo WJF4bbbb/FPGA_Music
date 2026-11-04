@@ -39,6 +39,9 @@
   var writer = null;
   var reading = false;
   var handlers = [];
+  var waveHandlers = [];
+  var connectionHandlers = [];
+  var waves = new WaveProtocol.Assembler();
   var keepalive = null;
 
   // ---- CRC8：多项式 0x07，初值 0x00，不反转 ----
@@ -63,41 +66,15 @@
 
   // ---- 帧解析状态机 ----
   // 格式：AA 55 | 类型 | 长度 | 数据... | CRC8（覆盖类型到数据末尾）
-  var st = { state: 0, type: 0, len: 0, data: [], idx: 0 };
+  var decoder = new WaveProtocol.FrameDecoder(dispatch, function () { waves.reset(); });
 
   function resetParser() {
-    st.state = 0; st.type = 0; st.len = 0; st.data = []; st.idx = 0;
+    decoder.reset();
+    waves.reset();
   }
 
-  function feed(b) {
-    switch (st.state) {
-      case 0:
-        if (b === HEAD0) st.state = 1;
-        break;
-      case 1:
-        if (b === HEAD1)      st.state = 2;
-        else if (b !== HEAD0) st.state = 0;   // 连续 AA 时保持在 1
-        break;
-      case 2:
-        st.type = b;
-        st.state = 3;
-        break;
-      case 3:
-        st.len = b;
-        st.data = [];
-        st.idx = 0;
-        st.state = st.len ? 4 : 5;
-        break;
-      case 4:
-        st.data.push(b);
-        if (++st.idx >= st.len) st.state = 5;
-        break;
-      case 5:
-        var body = [st.type, st.len].concat(st.data);
-        if (crc8(body) === b) dispatch(st.type, st.data);
-        resetParser();
-        break;
-    }
+  function connectionState(value) {
+    connectionHandlers.forEach(function (fn) { try { fn(value); } catch (e) { console.error(e); } });
   }
 
   function parseStatus(d) {
@@ -113,6 +90,11 @@
   }
 
   function dispatch(type, data) {
+    if (type === 0x10) {
+      var capture = waves.push(data);
+      if (capture) waveHandlers.forEach(function (fn) { try { fn(capture); } catch (e) { console.error(e); } });
+      return;
+    }
     if (type !== TYPE_STATUS) return;
     if (data.length !== 15) return;
     var s = parseStatus(data);
@@ -130,13 +112,14 @@
           var r = await reader.read();
           if (r.done) break;
           var chunk = r.value;
-          for (var i = 0; i < chunk.length; i++) feed(chunk[i]);
+          decoder.push(chunk);
         }
       } catch (e) {
         if (reading) setStatus('读取中断', 'err');
       } finally {
         try { reader.releaseLock(); } catch (e) {}
         reader = null;
+        resetParser();
       }
     }
   }
@@ -155,6 +138,7 @@
       writer = port.writable.getWriter();
       reading = true;
       resetParser();
+      connectionState(true);
       setStatus('已连接', 'on');
       readLoop();
       updateButtons();
@@ -170,6 +154,8 @@
 
   async function disconnect() {
     reading = false;
+    resetParser();
+    connectionState(false);
     stopKeepalive();
     try { if (reader) await reader.cancel(); } catch (e) {}
     try { if (writer) { writer.releaseLock(); } } catch (e) {}
@@ -257,6 +243,8 @@
     sendNote: sendNote,
     sendRelease: sendRelease,
     onFrame: onFrame,
+    onWave: function (fn) { if (typeof fn === 'function') waveHandlers.push(fn); },
+    onConnection: function (fn) { if (typeof fn === 'function') connectionHandlers.push(fn); },
     setStatus: setStatus,
     crc8: crc8
   };

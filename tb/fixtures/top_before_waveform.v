@@ -1,0 +1,304 @@
+`timescale 1ns/1ps
+`default_nettype none
+// Serial electrical boundary is normalized once by ttp229_reader.
+module top_before_waveform #(
+    parameter NVOICE = 4,
+    parameter integer TTP_STARTUP_CYCLES=13500000,
+    parameter integer TTP_SCL_HALF_CYCLES=135,
+    parameter integer TTP_FRAME_GAP_CYCLES=81000,
+    parameter TTP_ACTIVE_LOW=1,
+    parameter integer TOUCH_CTRL_FILT=135000, // 5 ms at 27 MHz
+    // 演示模式开关。默认 0 = 关闭，键盘优先。
+    //   若置 1，开机时 test_enable 为高则锁定演示模式（播放 C4/E4/G4/C5 循环和弦）。
+    parameter DEMO_ENABLE=0
+) (
+    input wire clk,
+    input wire rst_n,
+    input wire ttp_sdo,
+    output wire ttp_scl,
+    input wire test_enable,
+    output wire bclk,
+    output wire lrclk,
+    output wire i2s_data,
+    output reg pa_en,
+    // ---- 蓝牙链路（脚手架预埋，勿改名、勿移位） ----
+    input  wire uart_rx_pin,   // HC-05 TXD -> FPGA，脚 77 (J6-5)
+    output wire uart_tx_pin    // FPGA -> HC-05 RXD，脚 85 (J6-4)
+);
+    // 演示模式（test_mode）在本板会被误触发，必须默认关掉：
+    //   test_enable 接在脚 74，该脚与配置 Flash 的 MSPI 引脚共用（构建开了
+    //   -use_mspi_as_gpio），上电后被拉高 → test_mode_latched=1 →
+    //   test_mode 用 C4/E4/G4/C5 循环和弦**完整顶替**触摸板。
+    //   实际现象：恒音高一直响（每 2.25 s 重放一次和弦）、按音符键毫无反应、
+    //   但音量键/弯音键仍然有效（它们走 control_panel 独立通路）。
+    //   因此这里把演示使能钉死为 0（DEMO_ENABLE=0），触摸板恢复最高实际优先级。
+    //   脚 74 的引脚约束保留不动，避免出现未约束 I/O。
+    wire demo_enable_eff = DEMO_ENABLE ? test_enable : 1'b0;
+
+    // 外部复位异步拉低，两级同步释放。test_enable同时经过两级同步。
+    // 第3个clk锁定启动模式，第4个clk释放全体子模块复位。
+    reg [1:0] reset_sync;
+    reg [1:0] mode_sync;
+    reg mode_locked;
+    reg test_mode_latched;
+    reg core_rst_n;
+    always @(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
+            reset_sync <= 2'b00;
+            mode_sync <= 2'b00;
+            mode_locked <= 1'b0;
+            test_mode_latched <= 1'b0;
+            core_rst_n <= 1'b0;
+        end else begin
+            reset_sync <= {reset_sync[0],1'b1};
+            mode_sync <= {mode_sync[0],demo_enable_eff};
+            if(reset_sync[1] && !mode_locked) begin
+                test_mode_latched <= mode_sync[1];
+                mode_locked <= 1'b1;
+            end
+            core_rst_n <= reset_sync[1] && mode_locked;
+        end
+    end
+
+    wire frame_tick, frame_load, bclk_rise_ce, bclk_fall_ce;
+    wire [4:0] bit_index;
+    wire [7:0] key_state;
+    wire [1:0] timbre;
+    wire signed [3:0] bend;
+    wire [15:0] master_gain;
+    wire real_valid, real_ready, real_on;
+    wire [2:0] real_key;
+    wire [6:0] real_note;
+    wire test_valid, test_ready, test_on;
+    wire [2:0] test_key;
+    wire [6:0] test_note;
+    wire evt_valid, evt_ready, evt_on;
+    wire [2:0] evt_key;
+    wire [6:0] evt_note;
+    wire [NVOICE*7-1:0] voice_note;
+    wire [NVOICE-1:0] voice_gate, voice_trigger, voice_busy, env_done;
+    wire [NVOICE*16-1:0] voice_samples;
+    wire [NVOICE-1:0] voice_valid;
+    wire signed [15:0] mixed_sample;
+    wire mixed_valid;
+    wire [15:0] touch_keys;
+    wire touch_valid,touch_commit;
+    // Centralized mapping. Bits are TP numbers, not package/panel numbers.
+    // TP0..7: notes; TP8:timbre, TP9/10:volume +/-; TP11/12:bend +/-.
+    // TP13..15 reserved. All consumer inputs are active-high.
+    wire [7:0] normalized_keys = touch_valid ? touch_keys[7:0] : 8'd0;
+    wire [4:0] normalized_panel =
+        touch_valid ? {touch_keys[8],touch_keys[11],touch_keys[12],touch_keys[9],touch_keys[10]} : 5'd0;
+    wire signed [15:0] tx_sample = pa_en ? mixed_sample : 16'sd0;
+    reg [1:0] pa_startup_boundaries;
+    // 统计保留在内部，便于波形观察；不占额外板卡引脚。
+    wire [31:0] overflow_count, underrun_count, clip_count;
+
+    // =====================================================================
+    // 蓝牙链路内部信号（脚手架预埋，名字已冻结，两个分支都不要改这一段）
+    //   bt_rx_data / bt_rx_valid  : uart_rx -> bt_cmd_parse
+    //   bt_evt_*                  : bt_cmd_parse -> 事件多路器
+    //   bt_owner                  : 蓝牙是否接管输入（1=接管，触摸板让位）
+    //   bt_tx_busy                : telemetry 内部发送状态（仅调试用）
+    // =====================================================================
+    wire [7:0] bt_rx_data;
+    wire       bt_rx_valid;
+    wire       bt_evt_valid, bt_evt_ready, bt_evt_on;
+    wire [2:0] bt_evt_key;
+    wire [6:0] bt_evt_note;
+    wire       bt_owner;
+    wire       bt_tx_busy;
+
+    // First load aligns I2S. The next two loads terminate two silent stereo
+    // frames, but their right LSBs are not sampled until the following rise.
+    // Wait until the subsequent left-MSB falling edge before enabling PA.
+    // External reset disables PA immediately, including between clk edges.
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pa_en <= 1'b0;
+            pa_startup_boundaries <= 2'd0;
+        end else if (!core_rst_n) begin
+            pa_en <= 1'b0;
+            pa_startup_boundaries <= 2'd0;
+        end else if (!pa_en && bclk_fall_ce) begin
+            if (frame_load && pa_startup_boundaries != 2'd3)
+                pa_startup_boundaries <= pa_startup_boundaries + 1'b1;
+            else if (pa_startup_boundaries == 2'd3 && bit_index == 5'd0)
+                pa_en <= 1'b1;
+        end
+    end
+
+    // 唯一音频时序源，27MHz直分频；备用clk_gen不例化。
+    audio_timing u_audio_timing (
+        .clk(clk), .rst_n(core_rst_n), .bclk(bclk), .lrclk(lrclk),
+        .bclk_rise_ce(bclk_rise_ce), .bclk_fall_ce(bclk_fall_ce),
+        .bit_index(bit_index), .frame_load(frame_load), .frame_tick(frame_tick)
+    );
+    ttp229_reader #(
+        .STARTUP_CYCLES(TTP_STARTUP_CYCLES),.SCL_HALF_CYCLES(TTP_SCL_HALF_CYCLES),
+        .FRAME_GAP_CYCLES(TTP_FRAME_GAP_CYCLES),.ACTIVE_LOW(TTP_ACTIVE_LOW)
+    ) u_ttp229_reader (
+        .clk(clk),.rst_n(core_rst_n),.sdo(ttp_sdo),.scl(ttp_scl),
+        .keys_state(touch_keys),.keys_valid(touch_valid),.keys_commit(touch_commit)
+    );
+    // Existing note stability filter (0.2 ms) is unchanged.
+    sensor_frontend u_sensor_frontend (
+        .clk(clk), .rst_n(core_rst_n), .key_raw(normalized_keys), .key_state(key_state)
+    );
+    control_panel #(.CTRL_FILT(TOUCH_CTRL_FILT)) u_control_panel (
+        .clk(clk), .rst_n(core_rst_n), .timbre_key(normalized_panel[4]),
+        .bend_up_key(normalized_panel[3]), .bend_down_key(normalized_panel[2]),
+        .volume_up_key(normalized_panel[1]), .volume_down_key(normalized_panel[0]),
+        .timbre(timbre), .bend(bend), .master_gain(master_gain)
+    );
+    // ------------------------------------------------------------------
+    // 死锁看门狗（全音关断）
+    //   若某个音符事件连续约 0.6 s 都送不到 voice_alloc，说明事件链已经卡死
+    //   （声部全被门控、队列头上那个 note_on 永远等不到空闲声部）。
+    //   此时强制复位事件链三个模块：门控全部清零 -> 立刻静音；
+    //   队列清空、owner 清零 -> 触摸板和蓝牙都能重新正常接管。
+    // ------------------------------------------------------------------
+    reg [23:0] stall_cnt;
+    reg [2:0]  panic_cnt;
+    reg        panic;
+    wire       evt_stall = evt_valid && !evt_ready;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            stall_cnt <= 24'd0;
+            panic     <= 1'b0;
+            panic_cnt <= 3'd0;
+        end else if (panic) begin
+            panic_cnt <= panic_cnt + 3'd1;
+            if (panic_cnt == 3'd7) panic <= 1'b0;
+        end else if (evt_stall) begin
+            if (stall_cnt == 24'hFFFFFF) begin
+                stall_cnt <= 24'd0;
+                panic     <= 1'b1;
+            end else begin
+                stall_cnt <= stall_cnt + 24'd1;
+            end
+        end else begin
+            stall_cnt <= 24'd0;
+        end
+    end
+    // 蓝牙交还控制权（bt_owner 1->0）时，把事件链整体复位 8 拍：
+    // 网页若漏发 note_off（触摸被系统取消、标签页被切走等），声部的 gate
+    // 会一直挂在那里，喇叭就变成"恒音高一直响"。这里在交还的那一拍强制
+    // 把所有 gate 清零，等于每次把控制权还给触摸板时顺便"全音关断"。
+    reg [2:0] rel_hold;
+    reg       bt_owner_d;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            bt_owner_d <= 1'b0;
+            rel_hold   <= 3'd0;
+        end else begin
+            bt_owner_d <= bt_owner;
+            if (bt_owner_d && !bt_owner) rel_hold <= 3'd7;
+            else if (rel_hold != 3'd0)   rel_hold <= rel_hold - 3'd1;
+        end
+    end
+
+    wire logic_rst_n = core_rst_n && !panic && (rel_hold == 3'd0);
+
+    note_event u_note_event (
+        .clk(clk), .rst_n(logic_rst_n), .key_state(key_state),
+        .evt_ready(real_ready), .evt_valid(real_valid),
+        .evt_key_id(real_key), .evt_note(real_note), .evt_on(real_on),
+        .overflow_count(overflow_count)
+    );
+    test_mode u_test_mode (
+        .clk(clk), .rst_n(core_rst_n), .enable(test_mode_latched),
+        .evt_ready(test_ready), .evt_valid(test_valid),
+        .evt_key_id(test_key), .evt_note(test_note), .evt_on(test_on)
+    );
+
+    // 模式启动后固定，运行中的外部开关变化不影响当前事件。
+    // 换模式必须统一复位，以同时清除事件队列、声部分配和包络。
+    //
+    // 三选一（优先级从高到低）：演示模式 > 蓝牙 > 触摸板
+    //   bt_owner 由 bt_cmd_parse 产生：收到第一条蓝牙命令后拉高，
+    //   直到收到"释放控制"命令才回低。蓝牙接管期间触摸板事件被丢弃，
+    //   避免两边同时按同一个键产生重复触发。
+    assign evt_valid = core_rst_n && (test_mode_latched ? test_valid :
+                                      bt_owner           ? bt_evt_valid : real_valid);
+    assign evt_key   = test_mode_latched ? test_key   : (bt_owner ? bt_evt_key  : real_key);
+    assign evt_note  = test_mode_latched ? test_note  : (bt_owner ? bt_evt_note : real_note);
+    assign evt_on    = test_mode_latched ? test_on    : (bt_owner ? bt_evt_on   : real_on);
+    assign real_ready   = core_rst_n && !test_mode_latched && !bt_owner && evt_ready;
+    assign test_ready   = core_rst_n &&  test_mode_latched &&           evt_ready;
+    assign bt_evt_ready = core_rst_n && !test_mode_latched &&  bt_owner && evt_ready;
+
+
+    // NVOICE合同只支持4或8；B模块的实现与此参数保持一致。
+    voice_alloc #(.NVOICE(NVOICE)) u_voice_alloc (
+        .clk(clk), .rst_n(logic_rst_n), .evt_valid(evt_valid), .evt_ready(evt_ready),
+        .evt_key_id(evt_key), .evt_note(evt_note), .evt_on(evt_on),
+        .voice_busy(voice_busy), .env_done(env_done), .voice_note(voice_note),
+        .voice_gate(voice_gate), .voice_trigger(voice_trigger)
+    );
+    genvar i;
+    generate for(i=0; i<NVOICE; i=i+1) begin: voices
+        wire signed [15:0] wave;
+        wire wave_valid;
+        wire signed [15:0] voice_sample;
+        osc #(.FS_HZ(46875)) u_osc (
+            .clk(clk), .rst_n(core_rst_n), .frame_tick(frame_tick),
+            .note(voice_note[i*7 +: 7]), .bend(bend), .timbre(timbre),
+            .wave(wave), .valid(wave_valid)
+        );
+        adsr #(.FS_HZ(46875)) u_adsr (
+            .clk(clk), .rst_n(core_rst_n), .frame_tick(frame_tick),
+            .wave_valid(wave_valid), .wave(wave),
+            .gate(voice_gate[i]), .trigger(voice_trigger[i]),
+            .sample(voice_sample), .valid(voice_valid[i]),
+            .busy(voice_busy[i]), .env_done(env_done[i])
+        );
+        // 第0声部在最低16位；总线仅作为位容器，不当作大signed数。
+        assign voice_samples[i*16 +: 16] = voice_sample;
+    end endgenerate
+    mixer #(.NVOICE(NVOICE)) u_mixer (
+        .clk(clk), .rst_n(core_rst_n), .frame_tick(frame_tick),
+        .voice_samples(voice_samples), .voice_valid(voice_valid),
+        .master_gain(master_gain), .sample(mixed_sample), .valid(mixed_valid),
+        .clip_count(clip_count)
+    );
+    // V1.1发送器已有pending/frame双缓存，top不重复增加缓冲。
+    // 当帧启动下一轮计算时，frame_load仅装载之前已完成的结果。
+    i2s_tx u_i2s_tx (
+        .clk(clk), .rst_n(core_rst_n), .sample(tx_sample), .sample_valid(mixed_valid),
+        .bclk_fall_ce(bclk_fall_ce), .bit_index(bit_index), .frame_load(frame_load),
+        .data(i2s_data), .underrun_count(underrun_count)
+    );
+
+    // =====================================================================
+    // 蓝牙链路脚手架（预埋）。以下三个例化的端口连接已冻结，不要改。
+    // 四个实现文件已建好空壳，两个分支各自填充自己那两个：
+    //   feature/bt-in   -> rtl/uart_rx.v  + rtl/bt_cmd_parse.v
+    //   feature/bt-out  -> rtl/uart_tx.v  + rtl/telemetry.v
+    // 空壳当前输出常量（全 0 / 恒高），保证整机可编译、可综合、可上板。
+    // =====================================================================
+    uart_rx #(.CLK_HZ(27000000), .BAUD(115200)) u_uart_rx (
+        .clk(clk), .rst_n(core_rst_n),
+        .rx(uart_rx_pin),
+        .data(bt_rx_data), .valid(bt_rx_valid)
+    );
+
+    bt_cmd_parse u_bt_cmd_parse (
+        .clk(clk), .rst_n(logic_rst_n),
+        .data(bt_rx_data), .valid(bt_rx_valid),
+        .evt_valid(bt_evt_valid), .evt_ready(bt_evt_ready),
+        .evt_key_id(bt_evt_key), .evt_note(bt_evt_note), .evt_on(bt_evt_on),
+        .owner(bt_owner)
+    );
+
+    // telemetry 内部自行例化 uart_tx，top 只连引脚。
+    telemetry_before_waveform #(.CLK_HZ(27000000), .BAUD(115200), .NVOICE(NVOICE)) u_telemetry (
+        .clk(clk), .rst_n(core_rst_n),
+        .touch_keys(touch_keys),
+        .voice_note(voice_note), .voice_gate(voice_gate),
+        .timbre(timbre), .bend(bend), .master_gain(master_gain),
+        .clip_count(clip_count),
+        .tx(uart_tx_pin), .tx_busy(bt_tx_busy)
+    );
+endmodule
+`default_nettype wire

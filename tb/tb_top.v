@@ -14,7 +14,7 @@ module tb_top;
     reg [15:0] expected_frame=0,pending=0;
     reg pending_valid=0,expected_bit=0,old_fall;
     reg [10:0] held_event;
-    top #(.NVOICE(NVOICE)) dut (
+    top #(.NVOICE(NVOICE),.DEMO_ENABLE(1)) dut (
         .clk(clk),.rst_n(rst_n),.ttp_scl(ttp_scl),.ttp_sdo(ttp_sdo),
         .test_enable(test_enable),.uart_rx_pin(1'b1),.bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data),.pa_en(pa_en)
     );

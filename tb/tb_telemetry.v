@@ -37,6 +37,7 @@ module tb_telemetry;
         .clk(clk), .rst_n(rst_n),
         .touch_keys(keys), .voice_note(notes), .voice_gate(gates),
         .timbre(timbre), .bend(bend), .master_gain(gain), .clip_count(clip),
+        .sample(16'sd0), .sample_valid(1'b0),
         .tx(tx), .tx_busy(tx_busy)
     );
 

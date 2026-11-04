@@ -34,8 +34,6 @@ module ttp229_reader #(
     localparam [1:0] STARTUP=2'd0,GAP=2'd1,LOW_PHASE=2'd2,HIGH_PHASE=2'd3;
     reg [1:0] state;
     reg [TIMER_W-1:0] timer;
-    // 抗误报补丁（全 1 过滤 + 3 帧去抖）在诊断期间临时移除，直接观察原始 frame_now。
-    wire [15:0] frame_now = {pressed, shift_keys[14:0]};
     reg [3:0] bit_index;
     reg [15:0] shift_keys;
     (* syn_preserve=1, syn_keep=1, async_reg="true" *) reg sdo_meta,sdo_sync;
@@ -45,6 +43,8 @@ module ttp229_reader #(
     // 结果上电时 8 个音符键全被当成"按住"（恒音高），按键反而变"松开"（无声）。
     // 恢复为 GitHub 原始：ACTIVE_LOW=1 时 pressed = ~sdo_sync，按下=1。
     wire pressed = ACTIVE_LOW ? ~sdo_sync : sdo_sync;
+    // Declare dependencies before use for strict default_nettype-none tools.
+    wire [15:0] frame_now = {pressed, shift_keys[14:0]};
 
     always @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin

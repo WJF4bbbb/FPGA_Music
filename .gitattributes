@@ -6,3 +6,6 @@
 
 # Preserve the verified release bitstream byte-for-byte on every platform.
 /bitstreams/MusicSynth_TangNano20K.fs -text -diff -merge
+/bitstreams/waveform-2026-11-04/*.fs -text -diff -merge
+# Vendor reports are retained verbatim; their aligned tables contain spaces.
+/bitstreams/waveform-2026-11-04/validation/** -text -diff -merge -whitespace

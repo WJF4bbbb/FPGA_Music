@@ -15,3 +15,4 @@ rtl/uart_rx.v
 rtl/uart_tx.v
 rtl/bt_cmd_parse.v
 rtl/telemetry.v
+rtl/wave_capture.v

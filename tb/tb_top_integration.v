@@ -17,7 +17,7 @@ module tb_top_integration;
     // At worst: debounce+sync; two phase ticks before changed phase output;
     // <=128 pipeline clocks; one pending/load frame; <=36 clocks to left MSB.
     localparam integer CONTROL_BOUND=ACQUIRE_BOUND+CTRL_WAIT+3*FRAME+128+36;
-    top #(.NVOICE(4),.TTP_STARTUP_CYCLES(270)) dut (
+    top #(.NVOICE(4),.TTP_STARTUP_CYCLES(270),.DEMO_ENABLE(1)) dut (
         .clk(clk),.rst_n(rst_n),.test_enable(test_enable),.ttp_scl(ttp_scl),.ttp_sdo(ttp_sdo),
         .bclk(bclk),.lrclk(lrclk),.i2s_data(i2s_data),.pa_en(pa_en)
     );

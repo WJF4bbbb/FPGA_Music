@@ -8,7 +8,8 @@ module tb_top_pa_enable;
     wire uart_tx_pin;
     ttp229_model chip(.rst_n(rst_n),.scl(ttp_scl),.keys(16'd0),.sdo(ttp_sdo));
     wire bclk, lrclk, i2s_data, pa_en;
-    top dut (.*);
+    // This bench deliberately exercises demo audio; release defaults disable it.
+    top #(.DEMO_ENABLE(1)) dut (.*);
     always #18.518518518 clk=~clk;
     integer cycle=0, last_bclk_edge=0, frames=0, muted_frames=0, audible_frames=0;
     integer bits=0, enables=0, resets=0, i;

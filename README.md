@@ -1,5 +1,7 @@
 # FPGA_Music 当前集成基线
 
+2026-11-04 新增 **FPGA 真实音频波形工作台**：有线/蓝牙均支持 512 点、16 位采集快照，网页提供冻结、倍率和过期提示。使用与验证见 [波形说明](docs/WAVEFORM.md)，对应新固件见 [waveform-2026-11-04](bitstreams/waveform-2026-11-04/README.md)。旧发布位流保持原样；波形功能需要烧录新固件。
+
 当前入口：[正式集成交接说明](docs/INTEGRATION_HANDOFF.md)。Tang Nano 20K V3923，27MHz，TTP229 16键，四声部DDS/ADSR/Mixer，外置MAX98357A，46.875kHz 16-bit双声道I2S。
 
 **尚未完整硬件验收通过：启动瞬态杂声和触摸边缘误触仍待优化。** 下列旧阶段文档保留历史，不代表当前交接状态。固定正式位流及SHA256见 [bitstreams](bitstreams/README.md)。当前仿真和离线构建入口分别为 run_integration.ps1、run_gowin_implementation.ps1；工具从PATH或显式环境/参数获取。

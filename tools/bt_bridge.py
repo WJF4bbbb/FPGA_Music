@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from wave_protocol import WaveAssembler, FrameDecoder
 
 AF_BTH = 32
 BTPROTO_RFCOMM = 3
@@ -69,6 +70,8 @@ class Shared:
     def __init__(self):
         self.lock = threading.Lock()
         self.status = None
+        self.wave = None
+        self.wave_seq = 0
         self.seq = 0
         self.connected = False
         self.frames = 0
@@ -81,11 +84,48 @@ class Shared:
 S = Shared()
 
 
+class BridgeParser:
+    """Route CRC-checked status and complete captures into shared state."""
+    def __init__(self, shared):
+        self.shared = shared
+        self.waves = WaveAssembler()
+        self.decoder = FrameDecoder(self._frame, self._bad_crc)
+
+    def reset(self):
+        self.decoder.reset()
+        self.waves.reset()
+        with self.shared.lock:
+            self.shared.wave = None
+
+    def _bad_crc(self):
+        self.waves.reset()
+        with self.shared.lock:
+            self.shared.bad += 1
+
+    def _frame(self, ftype, payload):
+        if ftype == TYPE_STATUS and len(payload) == 15:
+            with self.shared.lock:
+                self.shared.status = parse_status(payload)
+                self.shared.seq += 1
+                self.shared.frames += 1
+        elif ftype == 0x10:
+            capture = self.waves.push(payload)
+            if capture is not None:
+                with self.shared.lock:
+                    self.shared.wave = capture
+                    self.shared.wave_seq += 1
+
+    def push(self, data):
+        self.decoder.push(data)
+
+
+def sse_event(data, event=None):
+    prefix = ('event: ' + event + '\n') if event else ''
+    return (prefix + 'data: ' + json.dumps(data) + '\n\n').encode('utf-8')
+
+
 def reader_loop(addr, channel):
-    st = 0
-    ftype = 0
-    flen = 0
-    fdata = bytearray()
+    parser = BridgeParser(S)
 
     while True:
         sock = None
@@ -101,7 +141,7 @@ def reader_loop(addr, channel):
             S.err = ""
             print("[bridge] RFCOMM 已连接 %s ch%d" % (addr, channel), flush=True)
 
-            st, ftype, flen, fdata = 0, 0, 0, bytearray()
+            parser.reset()
 
             while True:
                 try:
@@ -111,43 +151,14 @@ def reader_loop(addr, channel):
                 if not chunk:
                     raise ConnectionError("对端关闭")
 
-                for b in chunk:
-                    if st == 0:
-                        if b == HEAD0:
-                            st = 1
-                    elif st == 1:
-                        if b == HEAD1:
-                            st = 2
-                        elif b != HEAD0:
-                            st = 0
-                    elif st == 2:
-                        ftype = b
-                        st = 3
-                    elif st == 3:
-                        flen = b
-                        fdata = bytearray()
-                        st = 4 if flen else 5
-                    elif st == 4:
-                        fdata.append(b)
-                        if len(fdata) >= flen:
-                            st = 5
-                    elif st == 5:
-                        body = bytes([ftype, flen]) + bytes(fdata)
-                        if crc8(body) == b:
-                            if ftype == TYPE_STATUS and flen == 15:
-                                with S.lock:
-                                    S.status = parse_status(fdata)
-                                    S.seq += 1
-                                    S.frames += 1
-                        else:
-                            S.bad += 1
-                        st = 0
+                parser.push(chunk)
 
         except Exception as e:
             S.connected = False
             S.err = "%s: %s" % (type(e).__name__, str(e)[:80])
             print("[bridge] 断开，2 秒后重连 -> %s" % S.err, flush=True)
         finally:
+            parser.reset()
             with S.sock_lock:
                 S.sock = None
             if sock is not None:
@@ -203,19 +214,26 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
 
             last_seq = -1
+            # A newly opened/reconnected SSE stream waits for a fresh capture.
+            with S.lock:
+                last_wave_seq = S.wave_seq
             last_beat = time.time()
             try:
                 while True:
                     with S.lock:
                         seq = S.seq
                         data = S.status
+                        wave_seq, wave = S.wave_seq, S.wave
                     now = time.time()
                     if seq != last_seq and data is not None:
                         last_seq = seq
-                        msg = "data: " + json.dumps(data) + "\n\n"
-                        self.wfile.write(msg.encode("utf-8"))
+                        self.wfile.write(sse_event(data))
                         self.wfile.flush()
-                    elif now - last_beat > 1.0:
+                    if wave_seq != last_wave_seq and wave is not None:
+                        last_wave_seq = wave_seq
+                        self.wfile.write(sse_event(wave, 'wave'))
+                        self.wfile.flush()
+                    if now - last_beat > 1.0:
                         last_beat = now
                         self.wfile.write(b": ping\n\n")
                         self.wfile.flush()

@@ -298,6 +298,7 @@ module top #(
         .voice_note(voice_note), .voice_gate(voice_gate),
         .timbre(timbre), .bend(bend), .master_gain(master_gain),
         .clip_count(clip_count),
+        .sample(tx_sample), .sample_valid(mixed_valid),
         .tx(uart_tx_pin), .tx_busy(bt_tx_busy)
     );
 endmodule
